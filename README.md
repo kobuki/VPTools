@@ -1,5 +1,7 @@
-VPTools Davis weather station compatible transceiver library
-------------------------------------------------------------
+VPTools
+-------
+
+VPTools is a Davis(TM) weather station compatible transceiver library. It is a work in progress.
 
 I decided to create a new, separate repo instead of forking the original. I originally only planned to contribute to the original repo which is was created with a full-fledged Davis console emulator in mind. I still wish to contribute wherever I can, but I needed a faster moving reposiotory where I can freely try my stuff and share with a few interested folks at WXForums.
 
