@@ -227,8 +227,6 @@ void print_value(char* vname, unsigned long value) {
   Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(F(" "));
 }
 
-// See: http://www.carluccio.de/davis-vue-hacking-part-2/
-//      https://github.com/Scott216/Weather_Station_Data/blob/master/Weather_Station/Weather_Station.ino
 void decode_packet(RadioData* rd) {
   int val;
   byte* packet = rd->packet;
