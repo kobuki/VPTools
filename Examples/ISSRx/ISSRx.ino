@@ -1,9 +1,6 @@
 
-#include <RFM69.h>
-#include <DavisRFM69.h>
-#include <Davisdef.h>
 #include <SPI.h>
-#include <SPIFlash.h>
+#include <DavisRFM69.h>
 #include <TimerOne.h>
 #include <PacketFifo.h>
 
@@ -14,7 +11,6 @@
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
 #define POST_RX_WAIT 2000         // RX "settle" delay
 
-SPIFlash flash(8, 0xEF30); //EF40 for 16mbit windbond chip
 DavisRFM69 radio;
 
 char hs[24];
@@ -38,7 +34,6 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
   radio.initialize();
   radio.setChannel(0);
-  flash.initialize();
   fifo.flush();
   initStations();
   Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection

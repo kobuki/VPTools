@@ -23,7 +23,6 @@
 //#define DAVIS_FREQS_AU
 //#define DAVIS_FREQS_NZ
 
-#include <Davisdef.h>
 #include <Arduino.h>            //assumes Arduino IDE v1.0 or greater
 
 #define DAVIS_PACKET_LEN      8 // ISS has fixed packet lengths of eight bytes, including CRC
@@ -208,6 +207,28 @@ typedef struct __attribute__((packed)) Station {
 
 #define RF_AFCLOWBETA_ON   0x20
 #define RF_AFCLOWBETA_OFF  0x00 // Default
+
+// Davis VP2 standalone station types
+#define STYPE_ISS         0x0 // ISS
+#define STYPE_TEMP_ONLY   0x1 // Temperature Only Station
+#define STYPE_HUM_ONLY    0x2 // Humidity Only Station
+#define STYPE_TEMP_HUM    0x3 // Temperature/Humidity Station
+#define STYPE_WLESS_ANEMO 0x4 // Wireless Anemometer Station
+#define STYPE_RAIN        0x5 // Rain Station
+#define STYPE_LEAF        0x6 // Leaf Station
+#define STYPE_SOIL        0x7 // Soil Station
+#define STYPE_SOIL_LEAF   0x8 // Soil/Leaf Station
+#define STYPE_SENSORLINK  0x9 // SensorLink Station (not supported for the VP2)
+#define STYPE_OFF         0xA // No station – OFF
+
+// Davis packet types
+#define VP2P_UV           0x4 // UV index
+#define VP2P_RAINSECS     0x5 // seconds between rain bucket tips
+#define VP2P_SOLAR        0x6 // solar irradiation
+#define VP2P_TEMP         0x8 // outside temperature
+#define VP2P_WINDGUST     0x9 // 10-minute wind gust
+#define VP2P_HUMIDITY     0xA // outside humidity
+#define VP2P_RAIN         0xE // rain bucket tips counter
 
 #endif  // DAVISRFM_h
 

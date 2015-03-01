@@ -11,7 +11,7 @@
 // http://creativecommons.org/licenses/by-sa/3.0/
 
 #include <DavisRFM69.h>
-#include <../RFM69/RFM69registers.h>
+#include <RFM69registers.h>
 #include <SPI.h>
 
 volatile byte DavisRFM69::DATA[DAVIS_PACKET_LEN];
