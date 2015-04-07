@@ -246,7 +246,6 @@ void decode_packet(RadioData* rd) {
 
   byte id = radio.DATA[0] & 7;
   int stIx = findStation(id);
-  byte byte4MSN;
 
   if (stations[stIx].type == STYPE_ISS)
 
@@ -262,10 +261,10 @@ void decode_packet(RadioData* rd) {
         break;
 
       case VP2P_RAINSECS:
-        byte4MSN = packet[4] >> 4;
         if (packet[3] == 0xff) {
           print_value("rainsecs", -1);
         } else {
+          byte byte4MSN = packet[4] >> 4;
           if (byte4MSN < 4) {
             val = (packet[3] >> 4) + packet[4];
           } else {
@@ -285,17 +284,29 @@ void decode_packet(RadioData* rd) {
         break;
 
       case VP2P_TEMP:
-        val = (int)packet[3] << 4 | packet[4] >> 4;
-        print_value("temp", (float)(val / 10.0));
+        if (packet[3] == 0xff) {
+          print_value("temp", -100);
+        } else {
+          val = (int)packet[3] << 4 | packet[4] >> 4;
+          print_value("temp", (float)(val / 10.0));
+        }
         break;
 
       case VP2P_HUMIDITY:
-        val = ((packet[4] >> 4) << 8 | packet[3]) / 10;
-        print_value("rh", (float)val);
+        if (packet[3] == 0) {
+          print_value("rh", -1);
+        } else {
+          val = ((packet[4] >> 4) << 8 | packet[3]) / 10;
+          print_value("rh", (float)val);
+        }
         break;
 
       case VP2P_RAIN:
-        print_value("rain", packet[3]);
+        if (packet[3] == 0x80) {
+          print_value("rain", -1);
+        } else {
+          print_value("rain", packet[3]);
+        }
     }
   
   if (stations[stIx].type == STYPE_ISS || stations[stIx].type == STYPE_WLESS_ANEMO) {
