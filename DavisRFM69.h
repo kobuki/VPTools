@@ -220,8 +220,12 @@ typedef struct __attribute__((packed)) Station {
 #define STYPE_SOIL_LEAF   0x8 // Soil/Leaf Station
 #define STYPE_SENSORLINK  0x9 // SensorLink Station (not supported for the VP2)
 #define STYPE_OFF         0xA // No station – OFF
+#define STYPE_VUE         0x10 // pseudo station type for the Vue ISS
+                               // since the Vue also has a type of 0x0
 
-// Davis packet types
+// Below are known, publicly documented packet types for the VP2 and the Vue.
+
+// VP2 packet types
 #define VP2P_UV           0x4 // UV index
 #define VP2P_RAINSECS     0x5 // seconds between rain bucket tips
 #define VP2P_SOLAR        0x6 // solar irradiation
@@ -229,6 +233,10 @@ typedef struct __attribute__((packed)) Station {
 #define VP2P_WINDGUST     0x9 // 10-minute wind gust
 #define VP2P_HUMIDITY     0xA // outside humidity
 #define VP2P_RAIN         0xE // rain bucket tips counter
+#define VP2P_SOIL_LEAF    0xF // soil/leaf station
+
+// Vue packet types
+#define VUEP_VCAP         0x2 // supercap voltage
+#define VUEP_VSOLAR       0x7 // solar panel voltage
 
 #endif  // DAVISRFM_h
-

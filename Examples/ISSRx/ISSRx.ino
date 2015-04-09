@@ -10,6 +10,7 @@
 #define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
 #define POST_RX_WAIT 2000         // RX "settle" delay
+#define POT_GAP_DEGREES 10        // VP2 wind vane potentiometer dead zone, +-N, straight at North in the middle, officially 20°
 
 DavisRFM69 radio;
 
@@ -241,79 +242,104 @@ void decode_packet(RadioData* rd) {
   print_value("rssi", -rd->rssi);
 
   print_value("batt", (char*)(packet[0] & 0x8 ? "err" : "ok"));
-  print_value("windv", packet[1]);
-  print_value("windd", packet[2]);
+
+  // All packet payload values are printed unconditionally, either properly
+  // calculated or flagged with a special "missing sensor" value, mostly -1.
+  // It's the CPE's responsibility to interpret our output accordingly.
 
   byte id = radio.DATA[0] & 7;
   int stIx = findStation(id);
 
-  if (stations[stIx].type == STYPE_ISS)
+  // wind data is present in every packet, windd = 0 means there's no anemometer
+  if (stations[stIx].type == STYPE_VUE) {
+    val = (packet[2] << 1) | (packet[4] & 2) >> 1;
+    val = val * 360 / 512;
+  } else {
+    val = POT_GAP_DEGREES - 1 + (361 - 2 * POT_GAP_DEGREES) * packet[1] / 255;
+  }
+  print_value("windv", val);
+  print_value("windd", packet[2]);
 
-    switch (packet[0] >> 4) {
+  switch (packet[0] >> 4) {
 
-      case VP2P_UV:
-        if (packet[3] == 0xff) {
-          print_value("uv", -1);
-        } else {
-          val = packet[3] << 8 | packet[4] >> 6;
-          print_value("uv", (float)(val / 50.0));
+    case VP2P_UV:
+      if (packet[3] == 0xff) {
+        print_value("uv", -1);
+      } else {
+        val = ((packet[3] << 8 | packet[4]) >> 6) - 1;
+        print_value("uv", (float)(val / 50.0));
+      }
+      break;
+
+    case VP2P_SOLAR:
+      if (packet[3] == 0xff) {
+        print_value("solar", -1);
+      } else {
+        val = ((packet[3] << 8 | packet[4]) >> 6) - 1;
+        print_value("solar", (float)(val / 0.5675));
+      }
+      break;
+
+    case VP2P_RAIN:
+      if (packet[3] == 0x80) {
+        print_value("rain", -1);
+      } else {
+        print_value("rain", packet[3]);
+      }
+      break;
+
+    case VP2P_RAINSECS:
+      if (packet[3] == 0xff) {
+        print_value("rainsecs", -1);
+      } else {
+        if (packet[4] & 0x40) { // strong rain flag
+          // strong rain: byte4[5:4] as value[5:4]
+          // strong rain: byte3[3:0) as value[3:0]
+          // 6 bits total
+          val = ((packet[4] & 0x30) | (packet[3] >> 4));
+        } else { // light rain
+          // light rain: byte4[5:4] as value[9:8] 
+          // light rain: byte3[7:0) as value[7:0]
+          // 10 bits total
+          val = (packet[4] & 0x30) << 4 | packet[3];
         }
-        break;
+        print_value("rainsecs", val);
+      }
+      break;
 
-      case VP2P_RAINSECS:
-        if (packet[3] == 0xff) {
-          print_value("rainsecs", -1);
-        } else {
-          byte byte4MSN = packet[4] >> 4;
-          if (byte4MSN < 4) {
-            val = (packet[3] >> 4) + packet[4];
-          } else {
-            val = packet[3] + (byte4MSN - 4) * 262;
-          }
-          print_value("rainsecs", val);
-        }
-        break;
+    case VP2P_TEMP:
+      if (packet[3] == 0xff) {
+        print_value("temp", -100);
+      } else {
+        val = (int)packet[3] << 4 | packet[4] >> 4;
+        print_value("temp", (float)(val / 10.0));
+      }
+      break;
 
-      case VP2P_SOLAR:
-        if (packet[3] == 0xff) {
-          print_value("solar", -1);
-        } else {
-          val = packet[3] << 8 | packet[4] >> 6;
-          print_value("solar", (float)(val * 1.757936));
-        }
-        break;
+    case VP2P_HUMIDITY:
+      val = ((packet[4] >> 4) << 8 | packet[3]) / 10; // 0 -> no sensor
+      print_value("rh", (float)val);
+      break;
 
-      case VP2P_TEMP:
-        if (packet[3] == 0xff) {
-          print_value("temp", -100);
-        } else {
-          val = (int)packet[3] << 4 | packet[4] >> 4;
-          print_value("temp", (float)(val / 10.0));
-        }
-        break;
+    case VP2P_WINDGUST:
+      print_value("windgust", packet[3]);
+      if (packet[3] != 0) {
+        print_value("gustref", packet[5] & 0xf0 >> 4);
+      }
+      break;
 
-      case VP2P_HUMIDITY:
-        if (packet[3] == 0) {
-          print_value("rh", -1);
-        } else {
-          val = ((packet[4] >> 4) << 8 | packet[3]) / 10;
-          print_value("rh", (float)val);
-        }
-        break;
+    case VP2P_SOIL_LEAF:
+      print_value("soilleaf", -1); // no public documentation of the packet type yet
+      break;
 
-      case VP2P_RAIN:
-        if (packet[3] == 0x80) {
-          print_value("rain", -1);
-        } else {
-          print_value("rain", packet[3]);
-        }
-    }
-  
-  if (stations[stIx].type == STYPE_ISS || stations[stIx].type == STYPE_WLESS_ANEMO) {
-    switch (packet[0] >> 4) {
-      case VP2P_WINDGUST:
-        print_value("windgust", packet[3]);
-    }
+    case VUEP_VCAP:
+      val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
+      print_value("vcap", (float)(val / 100.0));
+      break;
+
+    case VUEP_VSOLAR:
+      val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
+      print_value("vsolar", val);
   }
 
   Serial.println();
