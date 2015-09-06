@@ -25,7 +25,7 @@
 
 #include <Arduino.h>            //assumes Arduino IDE v1.0 or greater
 
-#define DAVIS_PACKET_LEN      8 // ISS has fixed packet lengths of eight bytes, including CRC
+#define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
 #define SPI_CS               SS // SS is the SPI slave select pin, for instance D10 on atmega328
 #define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)
 #define CSMA_LIMIT          -90 // upper RX signal sensitivity threshold in dBm for carrier sense access
@@ -55,7 +55,6 @@ class DavisRFM69 {
       _isRFM69HW = isRFM69HW;
     }
 
-    void send(byte toAddress, const void* buffer, byte bufferSize, bool requestACK=false);
     static volatile byte hopIndex;
     void setChannel(byte channel);
     void hop();
@@ -63,7 +62,7 @@ class DavisRFM69 {
 
     void initialize();
     bool canSend();
-    void send(const void* buffer, byte bufferSize);
+    void send(const void* buffer);
     bool receiveDone();
     void setFrequency(uint32_t FRF);
     void setCS(byte newSPISlaveSelect);
@@ -86,7 +85,7 @@ class DavisRFM69 {
     void (*userInterrupt)();
 
     void virtual interruptHandler();
-    void sendFrame(const void* buffer, byte size);
+    void sendFrame(const void* buffer);
     byte reverseBits(byte b);
 
     static void isr0();
@@ -106,6 +105,10 @@ class DavisRFM69 {
 
 // FRF_MSB, FRF_MID, and FRF_LSB for the 51 North American channels & 5 European channels.
 // used by Davis in frequency hopping
+
+#define FREQ_TABLE_LENGTH_US 51
+#define FREQ_TABLE_LENGTH_AU 51
+#define FREQ_TABLE_LENGTH_EU 5
 
 #ifdef DAVIS_FREQS_US
 #warning ** USING NORTH AMERICAN FREQUENCY TABLE **
@@ -164,6 +167,62 @@ static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
   {0xE4, 0x7B, 0x0C},
   {0xE7, 0x5D, 0x98}
 };
+#elif defined (DAVIS_FREQS_AU)
+#define DAVIS_FREQ_TABLE_LENGTH 51
+static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
+{
+   {0xE5, 0x84, 0xDD},
+   {0xE6, 0x43, 0x43},
+   {0xE7, 0x1F, 0xCE},
+   {0xE6, 0x7F, 0x7C},
+   {0xE5, 0xD5, 0x0E},
+   {0xE7, 0x5B, 0xF7},
+   {0xE6, 0xC5, 0x81},
+   {0xE6, 0x07, 0x2B},
+   {0xE6, 0xED, 0xA1},
+   {0xE6, 0x61, 0x58},
+   {0xE5, 0xA3, 0x02},
+   {0xE6, 0xA7, 0x8D},
+   {0xE7, 0x3D, 0xB2},
+   {0xE6, 0x25, 0x3F},
+   {0xE5, 0xB7, 0x0A},
+   {0xE6, 0x93, 0x85},
+   {0xE7, 0x01, 0xDB},
+   {0xE5, 0xE9, 0x26},
+   {0xE7, 0x70, 0x00},
+   {0xE6, 0x57, 0x6C},
+   {0xE5, 0x98, 0xF5},
+   {0xE6, 0xB1, 0x99},
+   {0xE7, 0x29, 0xDB},
+   {0xE6, 0x11, 0x37},
+   {0xE7, 0x65, 0xE3},
+   {0xE5, 0xCB, 0x33},
+   {0xE6, 0x75, 0x60},
+   {0xE6, 0xD9, 0xA9},
+   {0xE7, 0x47, 0xDF},
+   {0xE5, 0x8E, 0xF9},
+   {0xE6, 0x2F, 0x4B},
+   {0xE7, 0x0B, 0xB6},
+   {0xE6, 0x89, 0x68},
+   {0xE5, 0xDF, 0x2B},
+   {0xE6, 0xBB, 0xA5},
+   {0xE7, 0x79, 0xFB},
+   {0xE6, 0xF7, 0xAE},
+   {0xE5, 0xFD, 0x2F},
+   {0xE6, 0x4D, 0x4F},
+   {0xE6, 0xCF, 0x8D},
+   {0xE5, 0xAD, 0x0E},
+   {0xE7, 0x33, 0xD7},
+   {0xE6, 0x9D, 0x91},
+   {0xE6, 0x1B, 0x33},
+   {0xE6, 0xE3, 0xA5},
+   {0xE5, 0xC1, 0x16},
+   {0xE7, 0x15, 0xC2},
+   {0xE5, 0xF3, 0x33},
+   {0xE6, 0x6B, 0x64},
+   {0xE7, 0x51, 0xDB},
+   {0xE6, 0x39, 0x58}
+};
 #elif defined (DAVIS_FREQS_EU)
 #warning ** USING EUROPEAN FREQUENCY TABLE **
 #define DAVIS_FREQ_TABLE_LENGTH 5
@@ -190,6 +249,8 @@ typedef struct __attribute__((packed)) Station {
   byte type;              // STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
   bool active;            // true when the station is actively listened to but ignored
                           // MUST be used when multiple stations are transmitting but only one is needed
+  byte repeaterId;        // repeater id when packet is coming via a repeater, otherwise 0
+                          // repeater IDs A..H are stored as 0x8..0xf here
   byte channel;           // rx channel the next packet of the station is expected on
   unsigned long lastRx;   // last time a packet is seen or should have been seen when missed
   unsigned long interval; // packet transmit interval for the station: (41 + id) / 16 * 1M ) microsecs
@@ -198,9 +259,6 @@ typedef struct __attribute__((packed)) Station {
 
 // added these here because upstream removed them
 #define REG_TESTAFC        0x71
-
-#define RF_FDEVMSB_4800    0x00 // old, wrong Fdev
-#define RF_FDEVLSB_4800    0x4e // old, wrong Fdev
 
 #define RF_FDEVMSB_9900    0x00
 #define RF_FDEVLSB_9900    0xa1

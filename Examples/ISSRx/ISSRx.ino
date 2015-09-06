@@ -10,7 +10,6 @@
 #define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
 #define POST_RX_WAIT 2000         // RX "settle" delay
-#define POT_GAP_DEGREES 10        // VP2 wind vane potentiometer dead zone, +-N, straight at North in the middle, officially 20°
 
 DavisRFM69 radio;
 
@@ -22,13 +21,13 @@ volatile unsigned long packets, lostPackets, numResyncs;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
 
-#define NUM_STATIONS 3
+#define NUM_STATIONS 2
 
 // id, type, active
 Station stations[NUM_STATIONS] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
-  { 2, STYPE_TEMP_HUM,    true }
+  //{ 2, STYPE_TEMP_HUM,    true }
 };
 
 void setup() {
@@ -253,9 +252,9 @@ void decode_packet(RadioData* rd) {
   // wind data is present in every packet, windd = 0 means there's no anemometer
   if (stations[stIx].type == STYPE_VUE) {
     val = (packet[2] << 1) | (packet[4] & 2) >> 1;
-    val = val * 360 / 512;
+    val = round(val * 360 / 512);
   } else {
-    val = POT_GAP_DEGREES - 1 + (361 - 2 * POT_GAP_DEGREES) * packet[1] / 255;
+    val = 9 + 342 * packet[1] / 255;
   }
   print_value("windv", val);
   print_value("windd", packet[2]);

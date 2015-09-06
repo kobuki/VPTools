@@ -299,8 +299,7 @@ void sendRadioPacket() {
   radio.DATA[1] = windSpeed;
   radio.DATA[2] = vaneAngleRaw;
   radio.DATA[3] = radio.DATA[4] = radio.DATA[5] = 0;
-  unsigned int crc = radio.crc16_ccitt(radio.DATA, DAVIS_PACKET_LEN - 2);
-  radio.send((const void*)radio.DATA, DAVIS_PACKET_LEN - 2);  
+  radio.send((const void*)radio.DATA);  
   radio.hop();
 }
 

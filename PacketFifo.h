@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #define FIFO_SIZE 8
-#define PACKET_LEN 8
+#define PACKET_LEN 10
 
 struct __attribute__((packed)) RadioData {
     byte packet[PACKET_LEN];
