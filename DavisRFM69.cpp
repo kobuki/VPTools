@@ -34,7 +34,7 @@ void DavisRFM69::initialize()
     /* 0x06 */ { REG_FDEVLSB, RF_FDEVLSB_9900},
     /* 0x07 to 0x09 are REG_FRFMSB to LSB. No sense setting them here. Done in main routine.
     /* 0x0B */ { REG_AFCCTRL, RF_AFCLOWBETA_OFF }, // TODO: Should use LOWBETA_ON, but having trouble getting it working
-    /* 0x12 */ { REG_PARAMP, RF_PARAMP_20 }, // xxx
+    /* 0x12 */ { REG_PARAMP, RF_PARAMP_25 }, // xxx
     // looks like PA1 and PA2 are not implemented on RFM69W, hence the max output power is 13dBm
     // +17dBm and +20dBm are possible on RFM69HW
     // +13dBm formula: Pout=-18+OutputPower (with PA0 or PA1**)
@@ -44,8 +44,9 @@ void DavisRFM69::initialize()
     ///* 0x13 */ { REG_OCP, RF_OCP_ON | RF_OCP_TRIM_95 }, //over current protection (default is 95mA)
     /* 0x18 */ { REG_LNA, RF_LNA_ZIN_50 | RF_LNA_GAINSELECT_AUTO }, // Not sure which is correct!
     // RXBW defaults are { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_24 | RF_RXBW_EXP_5} (RxBw: 10.4khz)
-    /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
-    /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use double the bandwidth during AFC as reception
+    /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
+    // for REG_RXBW 50 kHz seems to work better and fixes console retransmit reception, too
+    /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_2 }, // Use double the bandwidth during AFC as reception
     /* 0x1B - 0x1D These registers are for OOK.  Not used */
     /* 0x1E */ { REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_ON },
     /* 0x1F & 0x20 AFC MSB and LSB values, respectively */

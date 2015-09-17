@@ -13,7 +13,7 @@
 
 DavisRFM69 radio;
 
-char hs[24];
+char hs[40];
 char* hex = "0123456789abcdef";
 
 PacketFifo fifo;
@@ -21,13 +21,13 @@ volatile unsigned long packets, lostPackets, numResyncs;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
 
-#define NUM_STATIONS 2
+#define NUM_STATIONS 3
 
 // id, type, active
 Station stations[NUM_STATIONS] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
-  //{ 2, STYPE_TEMP_HUM,    true }
+  { 7, STYPE_ISS,         true }
 };
 
 void setup() {
@@ -91,14 +91,14 @@ void handleRadioInt() {
 
   unsigned long lastRx = micros();
 
-  unsigned int calcCrc = radio.crc16_ccitt(radio.DATA, 6);  // calculated and
-  unsigned int rxCrc = word(radio.DATA[6], radio.DATA[7]);  // received crc
-  
+  unsigned int rxCrc = word(radio.DATA[6], radio.DATA[7]);  // received CRC
+  unsigned int calcCrc = radio.crc16_ccitt(radio.DATA, 6);  // calculated CRC
+
   f = 1;
   delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
                                    // probably needed by the module to settle something after RX
 
-  //fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI);
+  // fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI);
 
   // packet passed crc?
   if (calcCrc == rxCrc && rxCrc != 0) {
@@ -231,7 +231,7 @@ void decode_packet(RadioData* rd) {
   int val;
   byte* packet = rd->packet;
 
-  packetToHex(packet, 6);
+  packetToHex(packet, 10);
   print_value("raw", hs);
   print_value("station", packet[0] & 0x7);
   print_value("packets", packets);
