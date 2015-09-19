@@ -18,11 +18,13 @@ volatile byte DavisRFM69::DATA[DAVIS_PACKET_LEN];
 volatile byte DavisRFM69::_mode;       // current transceiver state
 volatile bool DavisRFM69::_packetReceived = false;
 volatile byte DavisRFM69::CHANNEL = 0;
+volatile byte DavisRFM69::band = 0;
 volatile int DavisRFM69::RSSI;   // RSSI measured immediately after payload reception
+volatile int16_t DavisRFM69::FEI;
 volatile bool DavisRFM69::txMode = false;
 DavisRFM69* DavisRFM69::selfPointer;
 
-void DavisRFM69::initialize()
+void DavisRFM69::initialize(byte freqBand)
 {
   const byte CONFIG[][2] =
   {
@@ -96,12 +98,16 @@ void DavisRFM69::initialize()
 
   selfPointer = this;
   userInterrupt = NULL;
+
+  setBand(freqBand);
+  setChannel(0);
 }
 
 void DavisRFM69::interruptHandler() {
   RSSI = readRSSI();  // Read up front when it is most likely the carrier is still up
   if (_mode == RF69_MODE_RX && (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY))
   {
+    FEI = word(readReg(REG_FEIMSB), readReg(REG_FEILSB));
     setMode(RF69_MODE_STANDBY);
     select();   // Select RFM69 module, disabling interrupts
     SPI.transfer(REG_FIFO & 0x7f);
@@ -185,10 +191,10 @@ void DavisRFM69::sendFrame(const void* buffer)
 void DavisRFM69::setChannel(byte channel)
 {
   CHANNEL = channel;
-  if (CHANNEL > DAVIS_FREQ_TABLE_LENGTH - 1) CHANNEL = 0;
-  writeReg(REG_FRFMSB, pgm_read_byte(&FRF[CHANNEL][0]));
-  writeReg(REG_FRFMID, pgm_read_byte(&FRF[CHANNEL][1]));
-  writeReg(REG_FRFLSB, pgm_read_byte(&FRF[CHANNEL][2]));
+  if (CHANNEL > bandTabLengths[band] - 1) CHANNEL = 0;
+  writeReg(REG_FRFMSB, pgm_read_byte(&bandTab[band][CHANNEL][0]));
+  writeReg(REG_FRFMID, pgm_read_byte(&bandTab[band][CHANNEL][1]));
+  writeReg(REG_FRFLSB, pgm_read_byte(&bandTab[band][CHANNEL][2]));
   if (!txMode) receiveBegin();
 }
 
@@ -395,4 +401,14 @@ void DavisRFM69::setTxMode(bool txMode)
 void DavisRFM69::setUserInterrupt(void (*function)())
 {
   userInterrupt = function;
+}
+
+void DavisRFM69::setBand(byte newBand)
+{
+  band = newBand;
+}
+
+byte DavisRFM69::getBandTabLength()
+{
+  return bandTabLengths[band];
 }

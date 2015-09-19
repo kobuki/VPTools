@@ -17,23 +17,22 @@ char hs[40];
 char* hex = "0123456789abcdef";
 
 PacketFifo fifo;
-volatile unsigned long packets, lostPackets, numResyncs;
+volatile uint32_t packets, lostPackets, numResyncs;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
 
-#define NUM_STATIONS 3
+#define NUM_STATIONS 2
 
 // id, type, active
 Station stations[NUM_STATIONS] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
-  { 7, STYPE_ISS,         true }
+  //{ 7, STYPE_ISS,         true }
 };
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  radio.initialize();
-  radio.setChannel(0);
+  radio.initialize(FREQ_BAND_EU);
   fifo.flush();
   initStations();
   Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection
@@ -98,7 +97,7 @@ void handleRadioInt() {
   delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
                                    // probably needed by the module to settle something after RX
 
-  // fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI);
+  // fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastRx);
 
   // packet passed crc?
   if (calcCrc == rxCrc && rxCrc != 0) {
@@ -140,7 +139,7 @@ void handleRadioInt() {
       // 8 received packet bytes including received CRC, the channel and RSSI go to the fifo
       if (stationsFound == NUM_STATIONS && stations[curStation].active) {
         packets++;
-        fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI);
+        fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastRx);
       }
 
       // successful reception - skip to next/earliest expected station
@@ -165,7 +164,7 @@ void handleRadioInt() {
 
 // Calculate the next hop of the specified channel
 byte nextChannel(byte channel) {
-  return ++channel % DAVIS_FREQ_TABLE_LENGTH;
+  return ++channel % radio.getBandTabLength();
 }
 
 // Find the station index in stations[] for station expected to tx the earliest and update curStation
@@ -208,23 +207,23 @@ void Blink(byte PIN, int DELAY_MS)
 }
 
 void print_value(char* vname, char* value) {
-  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(F(" "));
+  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 
 void print_value(char* vname, int value) {
-  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(F(" "));
+  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 
 void print_value(char* vname, float value) {
-  Serial.print(vname); Serial.print(F(":")); Serial.print(value, 1); Serial.print(F(" "));
+  Serial.print(vname); Serial.print(F(":")); Serial.print(value, 1); Serial.print(' ');
 }
 
 void print_value(char* vname, long value) {
-  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(F(" "));
+  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 
 void print_value(char* vname, unsigned long value) {
-  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(F(" "));
+  Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 
 void decode_packet(RadioData* rd) {
@@ -234,9 +233,15 @@ void decode_packet(RadioData* rd) {
   packetToHex(packet, 10);
   print_value("raw", hs);
   print_value("station", packet[0] & 0x7);
-  print_value("packets", packets);
-  print_value("lostp", lostPackets);
-  print_value("ratio", (float)(packets * 100.0 / (packets + lostPackets)));
+
+  Serial.print(F("packets:"));
+  Serial.print(packets);
+  Serial.print('/');
+  Serial.print(lostPackets);
+  Serial.print('/');
+  Serial.print((float)(packets * 100.0 / (packets + lostPackets)));
+  Serial.print(' ');
+
   print_value("channel", rd->channel);
   print_value("rssi", -rd->rssi);
 
@@ -249,15 +254,19 @@ void decode_packet(RadioData* rd) {
   byte id = radio.DATA[0] & 7;
   int stIx = findStation(id);
 
-  // wind data is present in every packet, windd = 0 means there's no anemometer
-  if (stations[stIx].type == STYPE_VUE) {
-    val = (packet[2] << 1) | (packet[4] & 2) >> 1;
-    val = round(val * 360 / 512);
+  // wind data is present in every packet, windd == 0 (packet[2] == 0) means there's no anemometer
+  if (packet[2] != 0) {
+    if (stations[stIx].type == STYPE_VUE) {
+      val = (packet[2] << 1) | (packet[4] & 2) >> 1;
+      val = round(val * 360 / 512);
+    } else {
+      val = 9 + 342 * packet[2] / 255;
+    }
   } else {
-    val = 9 + 342 * packet[1] / 255;
+    val = 0;
   }
-  print_value("windv", val);
-  print_value("windd", packet[2]);
+  print_value("windv", packet[1]);
+  print_value("windd", val);
 
   switch (packet[0] >> 4) {
 
@@ -340,6 +349,9 @@ void decode_packet(RadioData* rd) {
       val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
       print_value("vsolar", val);
   }
+
+//  print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
+//  print_value("delta", rd->delta);
 
   Serial.println();
 }

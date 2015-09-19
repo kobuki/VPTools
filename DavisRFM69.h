@@ -13,16 +13,6 @@
 #ifndef DAVISRFM69_h
 #define DAVISRFM69_h
 
-// Uncomment ONE AND ONLY ONE of the four #define's below.  This determines the
-// frequency table the code will use.  Note that only the US (actually North
-// America) and EU frequencies are defined at this time.  Australia and New
-// Zealand are placeholders.  Note however that the frequencies for AU and NZ
-// are not known at this time.
-//#define DAVIS_FREQS_US
-#define DAVIS_FREQS_EU
-//#define DAVIS_FREQS_AU
-//#define DAVIS_FREQS_NZ
-
 #include <Arduino.h>            //assumes Arduino IDE v1.0 or greater
 
 #define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
@@ -37,6 +27,7 @@
 
 #define null                  0
 #define COURSE_TEMP_COEF    -90 // puts the temperature reading in the ballpark, user can fine tune the returned value
+#define RF69_FSTEP 61.03515625 // == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
 
 class DavisRFM69 {
   public:
@@ -45,6 +36,8 @@ class DavisRFM69 {
     static volatile bool _packetReceived;
     static volatile byte CHANNEL;
     static volatile int RSSI;
+    static volatile int16_t FEI;
+	static volatile byte band;
 
     DavisRFM69(byte slaveSelectPin=SPI_CS, byte interruptPin=RF69_IRQ_PIN, bool isRFM69HW=false) {
       _slaveSelectPin = slaveSelectPin;
@@ -60,7 +53,7 @@ class DavisRFM69 {
     void hop();
     unsigned int crc16_ccitt(volatile byte *buf, byte len, unsigned int initCrc = 0);
 
-    void initialize();
+    void initialize(byte freqBand);
     bool canSend();
     void send(const void* buffer);
     bool receiveDone();
@@ -79,6 +72,8 @@ class DavisRFM69 {
     void readAllRegs();
     void setTxMode(bool txMode);
     void setUserInterrupt(void (*function)());
+	void setBand(byte newBand);
+	byte getBandTabLength();
 
   protected:
     static volatile bool txMode;
@@ -103,17 +98,20 @@ class DavisRFM69 {
     void unselect();
 };
 
-// FRF_MSB, FRF_MID, and FRF_LSB for the 51 North American channels & 5 European channels.
+// FRF_MSB, FRF_MID, and FRF_LSB for the 51 North American, Australian & 5 European channels
 // used by Davis in frequency hopping
 
 #define FREQ_TABLE_LENGTH_US 51
 #define FREQ_TABLE_LENGTH_AU 51
 #define FREQ_TABLE_LENGTH_EU 5
 
-#ifdef DAVIS_FREQS_US
-#warning ** USING NORTH AMERICAN FREQUENCY TABLE **
-#define DAVIS_FREQ_TABLE_LENGTH 51
-static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
+#define FREQ_BAND_US 0
+#define FREQ_BAND_AU 1
+#define FREQ_BAND_EU 2
+
+typedef uint8_t FRF_ITEM[3];
+
+static const __attribute__((progmem)) FRF_ITEM FRF_US[FREQ_TABLE_LENGTH_US] =
 {
   {0xE3, 0xDA, 0x7C},
   {0xE1, 0x98, 0x71},
@@ -167,9 +165,8 @@ static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
   {0xE4, 0x7B, 0x0C},
   {0xE7, 0x5D, 0x98}
 };
-#elif defined (DAVIS_FREQS_AU)
-#define DAVIS_FREQ_TABLE_LENGTH 51
-static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
+
+static const __attribute__((progmem)) FRF_ITEM FRF_AU[FREQ_TABLE_LENGTH_AU] =
 {
    {0xE5, 0x84, 0xDD},
    {0xE6, 0x43, 0x43},
@@ -223,10 +220,8 @@ static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
    {0xE7, 0x51, 0xDB},
    {0xE6, 0x39, 0x58}
 };
-#elif defined (DAVIS_FREQS_EU)
-#warning ** USING EUROPEAN FREQUENCY TABLE **
-#define DAVIS_FREQ_TABLE_LENGTH 5
-static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
+
+static const __attribute__((progmem)) FRF_ITEM FRF_EU[FREQ_TABLE_LENGTH_EU] =
 {
   {0xD9, 0x04, 0x45},
   {0xD9, 0x13, 0x04},
@@ -234,13 +229,18 @@ static const uint8_t __attribute__ ((progmem)) FRF[DAVIS_FREQ_TABLE_LENGTH][3] =
   {0xD9, 0x0B, 0xA4},
   {0xD9, 0x1A, 0x63}
 };
-#elif defined (DAVIS_FREQS_AU)
-#error ** ERROR DAVIS FREQS FOR AU ARE NOT KNOWN AT THIS TIME. ONLY US & EU DEFINED **
-#elif defined (DAVIS_FREQS_NZ)
-#error ** ERROR DAVIS FREQS FOR NZ ARE NOT KNOWN AT THIS TIME. ONLY US & EU DEFINED **
-#else
-#error ** ERROR DAVIS_FREQS MUST BE DEFINED AS ONE OF _US, _EU, _AZ, or NZ **
-#endif  // DAVIS_FREQS
+
+static const FRF_ITEM *bandTab[3] = {
+  FRF_US,
+  FRF_AU,
+  FRF_EU
+};
+
+static const uint8_t bandTabLengths[3] = {
+  FREQ_TABLE_LENGTH_US,
+  FREQ_TABLE_LENGTH_AU,
+  FREQ_TABLE_LENGTH_EU
+};
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
