@@ -45,10 +45,10 @@ void DavisRFM69::initialize(byte freqBand)
     ///* 0x11 */ { REG_PALEVEL, RF_PALEVEL_PA0_ON | RF_PALEVEL_PA1_OFF | RF_PALEVEL_PA2_OFF | RF_PALEVEL_OUTPUTPOWER_11111},
     ///* 0x13 */ { REG_OCP, RF_OCP_ON | RF_OCP_TRIM_95 }, //over current protection (default is 95mA)
     /* 0x18 */ { REG_LNA, RF_LNA_ZIN_50 | RF_LNA_GAINSELECT_AUTO }, // Not sure which is correct!
-    // RXBW defaults are { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_24 | RF_RXBW_EXP_5} (RxBw: 10.4khz)
-    /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
-    // for REG_RXBW 50 kHz seems to work better and fixes console retransmit reception, too
-    /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_2 }, // Use double the bandwidth during AFC as reception
+    // REG_RXBW 50 kHz fixes console retransmit reception but seems worse for SIM transmitters (to be confirmed with more testing)
+	// Defaulting to narrow BW, since console retransmits are rarely used - use setBandwidth() to change this
+    /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
+    /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use double the bandwidth during AFC as reception
     /* 0x1B - 0x1D These registers are for OOK.  Not used */
     /* 0x1E */ { REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_ON },
     /* 0x1F & 0x20 AFC MSB and LSB values, respectively */
@@ -406,6 +406,23 @@ void DavisRFM69::setUserInterrupt(void (*function)())
 void DavisRFM69::setBand(byte newBand)
 {
   band = newBand;
+}
+
+void DavisRFM69::setBandwidth(byte bw)
+{
+  switch (bw) {
+    case RF69_DAVIS_BW_NARROW:
+	  writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4); // Use 25 kHz BW (BitRate < 2 * RxBw)
+	  writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use double the bandwidth during AFC as reception
+      break;
+    case RF69_DAVIS_BW_WIDE:
+      // REG_RXBW 50 kHz fixes console retransmit reception but seems worse for SIM transmitters (to be confirmed with more testing)
+	  writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use 50 kHz BW (BitRate < 2 * RxBw)
+	  writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_2); // Use double the bandwidth during AFC as reception
+      break;
+    default:
+      return;
+  }
 }
 
 byte DavisRFM69::getBandTabLength()

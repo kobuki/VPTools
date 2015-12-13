@@ -1,15 +1,20 @@
 
 #include <SPI.h>
+#include <EEPROM.h>
+
 #include <DavisRFM69.h>
 #include <TimerOne.h>
 #include <PacketFifo.h>
-
+ 
 #define LED           9  // Moteinos have LEDs on D9
 #define SERIAL_BAUD   115200
 
 #define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
 #define POST_RX_WAIT 2000         // RX "settle" delay
+#define MAX_STATIONS 8            // max. stations this code is able to handle
+
+#define ROM_CONFIG_OFFSET = 0
 
 DavisRFM69 radio;
 
@@ -20,19 +25,18 @@ PacketFifo fifo;
 volatile uint32_t packets, lostPackets, numResyncs;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
-
-#define NUM_STATIONS 2
+volatile byte numStations = 2;
 
 // id, type, active
-Station stations[NUM_STATIONS] = {
+Station stations[MAX_STATIONS] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
-  //{ 7, STYPE_ISS,         true }
 };
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
   radio.initialize(FREQ_BAND_EU);
+  radio.setBandwidth(RF69_DAVIS_BW_NARROW);
   fifo.flush();
   initStations();
   Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection
@@ -56,9 +60,9 @@ void handleTimerInt() {
   
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
-  for (byte i = 0; i < NUM_STATIONS; i++) {
+  for (byte i = 0; i < numStations; i++) {
     if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
-      if (stationsFound == NUM_STATIONS && stations[curStation].active) lostPackets++;
+      if (stationsFound == numStations && stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
       if (stations[i].lostPackets > RESYNC_THRESHOLD) {
         numResyncs++;
@@ -76,7 +80,7 @@ void handleTimerInt() {
   // find/set earliest expected rx channel or in Phase 1, reset radio on current channel
   if (readjust) {
     nextStation();
-    if (stationsFound < NUM_STATIONS) {
+    if (stationsFound < numStations) {
       radio.setChannel(radio.CHANNEL);
     } else {
       radio.setChannel(stations[curStation].channel);
@@ -115,7 +119,7 @@ void handleRadioInt() {
     // Phase 1: station discovery
     // stay on a fixed channel and store last rx timestamp of discovered stations in station array
     // interval is used as 'station seen' flag
-    if (stationsFound < NUM_STATIONS && stations[stIx].interval == 0) {
+    if (stationsFound < numStations && stations[stIx].interval == 0) {
 
       stations[stIx].channel = nextChannel(radio.CHANNEL);
       stations[stIx].lastRx = lastRx;
@@ -125,7 +129,7 @@ void handleRadioInt() {
       nextStation(); // skip to next station expected to tx
 
       // reset current radio channel in Phase 1 or start Phase 2
-      if (stationsFound < NUM_STATIONS) {
+      if (stationsFound < numStations) {
         radio.setChannel(radio.CHANNEL);
       } else {
         radio.setChannel(stations[curStation].channel);
@@ -137,7 +141,7 @@ void handleRadioInt() {
       
       // Phase 2: normal reception
       // 8 received packet bytes including received CRC, the channel and RSSI go to the fifo
-      if (stationsFound == NUM_STATIONS && stations[curStation].active) {
+      if (stationsFound == numStations && stations[curStation].active) {
         packets++;
         fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastRx);
       }
@@ -147,7 +151,7 @@ void handleRadioInt() {
       stations[curStation].lastRx = lastRx;
       stations[curStation].channel = nextChannel(radio.CHANNEL);
       nextStation();
-      if (stationsFound < NUM_STATIONS) { // Phase 1/2 check as usual
+      if (stationsFound < numStations) { // Phase 1/2 check as usual
         radio.setChannel(radio.CHANNEL);
       } else {
         radio.setChannel(stations[curStation].channel);
@@ -171,7 +175,7 @@ byte nextChannel(byte channel) {
 void nextStation() {
   unsigned long earliest = 0xffffffff;
   unsigned long now = micros();
-  for (int i = 0; i < NUM_STATIONS; i++) {
+  for (int i = 0; i < numStations; i++) {
     unsigned long current = stations[i].lastRx + stations[i].interval - now;
     if (stations[i].interval > 0 && current < earliest) {
       earliest = current;
@@ -182,7 +186,7 @@ void nextStation() {
 
 // Find station index in stations[] for a station ID (-1 if doesn't exist)
 int findStation(byte id) {
-  for (byte i = 0; i < NUM_STATIONS; i++) {
+  for (byte i = 0; i < numStations; i++) {
     if (stations[i].id == id) return i;
   }
   return -1;
@@ -190,7 +194,7 @@ int findStation(byte id) {
 
 // Reset station array to safe defaults
 void initStations() {
-  for (byte i = 0; i < NUM_STATIONS; i++) {
+  for (byte i = 0; i < numStations; i++) {
     stations[i].channel = 0;
     stations[i].lastRx = 0;
     stations[i].interval = 0;
@@ -260,12 +264,13 @@ void decode_packet(RadioData* rd) {
       val = (packet[2] << 1) | (packet[4] & 2) >> 1;
       val = round(val * 360 / 512);
     } else {
-      val = 9 + 342 * packet[2] / 255;
+      val = 9 + 342 * (unsigned int)packet[2] / 255;
     }
   } else {
     val = 0;
   }
   print_value("windv", packet[1]);
+  print_value("winddraw", packet[2]);
   print_value("windd", val);
 
   switch (packet[0] >> 4) {

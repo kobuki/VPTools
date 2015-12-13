@@ -25,6 +25,9 @@
 #define RF69_MODE_RX          3 // RX MODE
 #define RF69_MODE_TX          4 // TX MODE
 
+#define RF69_DAVIS_BW_NARROW  1
+#define RF69_DAVIS_BW_WIDE    2
+
 #define null                  0
 #define COURSE_TEMP_COEF    -90 // puts the temperature reading in the ballpark, user can fine tune the returned value
 #define RF69_FSTEP 61.03515625 // == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
@@ -73,6 +76,7 @@ class DavisRFM69 {
     void setTxMode(bool txMode);
     void setUserInterrupt(void (*function)());
 	void setBand(byte newBand);
+	void setBandwidth(byte bw);
 	byte getBandTabLength();
 
   protected:
