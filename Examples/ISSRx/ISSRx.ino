@@ -18,9 +18,6 @@
 
 DavisRFM69 radio;
 
-char hs[40];
-char* hex = "0123456789abcdef";
-
 PacketFifo fifo;
 volatile uint32_t packets, lostPackets, numResyncs;
 volatile byte stationsFound = 0;
@@ -234,9 +231,9 @@ void decode_packet(RadioData* rd) {
   int val;
   byte* packet = rd->packet;
 
-  packetToHex(packet, 10);
-  print_value("raw", hs);
-  print_value("station", packet[0] & 0x7);
+  Serial.print(F("raw:"));
+  printHex(packet, 10);
+  print_value(" station", packet[0] & 0x7);
 
   Serial.print(F("packets:"));
   Serial.print(packets);
@@ -355,19 +352,17 @@ void decode_packet(RadioData* rd) {
       print_value("vsolar", val);
   }
 
-//  print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
-//  print_value("delta", rd->delta);
+  print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
+  print_value("delta", rd->delta);
 
   Serial.println();
 }
 
-void packetToHex(volatile byte* packet, byte len) {
-  hs[len * 3 - 1] = 0;
-  int x = 0;
+void printHex(volatile byte* packet, byte len) {
   for (byte i = 0; i < len; i++) {
-    hs[x++] = hex[packet[i] >> 4];
-    hs[x++] = hex[packet[i] & 0x0f];
-    if (i < len - 1) hs[x++] = '-';
+    if (!(packet[i] & 0xf0)) Serial.print('0');
+    Serial.print(packet[i], HEX);
+    if (i < len - 1) Serial.print('-');
   }
 }
 
