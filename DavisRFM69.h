@@ -291,14 +291,14 @@ static const __attribute__((progmem)) FRF_ITEM FRF_NZ[FREQ_TABLE_LENGTH_NZ] =
   {0xe7, 0x78, 0xa4}
 };
 
-static const FRF_ITEM *bandTab[3] = {
+static const FRF_ITEM *bandTab[4] = {
   FRF_US,
   FRF_AU,
   FRF_EU,
   FRF_NZ
 };
 
-static const uint8_t bandTabLengths[3] = {
+static const uint8_t bandTabLengths[4] = {
   FREQ_TABLE_LENGTH_US,
   FREQ_TABLE_LENGTH_AU,
   FREQ_TABLE_LENGTH_EU,
