@@ -107,8 +107,8 @@ class DavisRFM69 {
 
 #define FREQ_TABLE_LENGTH_US 51
 #define FREQ_TABLE_LENGTH_AU 51
-#define FREQ_TABLE_LENGTH_NZ 51
 #define FREQ_TABLE_LENGTH_EU 5
+#define FREQ_TABLE_LENGTH_NZ 51
 
 #define FREQ_BAND_US 0
 #define FREQ_BAND_AU 1
@@ -294,13 +294,15 @@ static const __attribute__((progmem)) FRF_ITEM FRF_NZ[FREQ_TABLE_LENGTH_NZ] =
 static const FRF_ITEM *bandTab[3] = {
   FRF_US,
   FRF_AU,
-  FRF_EU
+  FRF_EU,
+  FRF_NZ
 };
 
 static const uint8_t bandTabLengths[3] = {
   FREQ_TABLE_LENGTH_US,
   FREQ_TABLE_LENGTH_AU,
-  FREQ_TABLE_LENGTH_EU
+  FREQ_TABLE_LENGTH_EU,
+  FREQ_TABLE_LENGTH_NZ
 };
 
 // Station data structure for managing radio reception
