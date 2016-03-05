@@ -115,7 +115,7 @@ class DavisRFM69 {
 #define FREQ_BAND_EU 2
 #define FREQ_BAND_NZ 3
 
-typedef uint8_t FRF_ITEM[4];
+typedef uint8_t FRF_ITEM[3];
 
 static const __attribute__((progmem)) FRF_ITEM FRF_US[FREQ_TABLE_LENGTH_US] =
 {
