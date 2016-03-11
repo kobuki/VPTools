@@ -5,7 +5,7 @@
 #include <DavisRFM69.h>
 #include <TimerOne.h>
 #include <PacketFifo.h>
- 
+
 #define LED           9  // Moteinos have LEDs on D9
 #define SERIAL_BAUD   115200
 
@@ -54,7 +54,7 @@ void handleTimerInt() {
 
   unsigned long lastRx = micros();
   bool readjust = false;
-  
+
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
@@ -106,20 +106,20 @@ void handleRadioInt() {
     // station id is byte 0:0-2
     byte id = radio.DATA[0] & 7;
     int stIx = findStation(id);
-    
+
     // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
     if (stIx < 0) {
       radio.setChannel(radio.CHANNEL);
       return;
     }
-    
+
     // Phase 1: station discovery
     // stay on a fixed channel and store last rx timestamp of discovered stations in station array
     // interval is used as 'station seen' flag
     if (stationsFound < numStations && stations[stIx].interval == 0) {
 
       stations[stIx].channel = nextChannel(radio.CHANNEL);
-      stations[stIx].lastRx = lastRx;
+      stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
       stations[stIx].lostPackets = 0;
       stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
       stationsFound++;
@@ -131,21 +131,21 @@ void handleRadioInt() {
       } else {
         radio.setChannel(stations[curStation].channel);
       }
-      
+
       return;
 
     } else {
-      
+
       // Phase 2: normal reception
       // 8 received packet bytes including received CRC, the channel and RSSI go to the fifo
       if (stationsFound == numStations && stations[curStation].active) {
         packets++;
-        fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastRx);
+        fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastSeen);
       }
 
       // successful reception - skip to next/earliest expected station
       stations[curStation].lostPackets = 0;
-      stations[curStation].lastRx = lastRx;
+      stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
       stations[curStation].channel = nextChannel(radio.CHANNEL);
       nextStation();
       if (stationsFound < numStations) { // Phase 1/2 check as usual
@@ -308,7 +308,7 @@ void decode_packet(RadioData* rd) {
           // 6 bits total
           val = ((packet[4] & 0x30) | (packet[3] >> 4));
         } else { // light rain
-          // light rain: byte4[5:4] as value[9:8] 
+          // light rain: byte4[5:4] as value[9:8]
           // light rain: byte3[7:0) as value[7:0]
           // 10 bits total
           val = (packet[4] & 0x30) << 4 | packet[3];
