@@ -310,7 +310,7 @@ void decode_packet(RadioData* rd) {
           val = (packet[4] & 0x30) << 4 | packet[3];
         } else { // strong rain
           // strong rain: byte4[5:4] as value[5:4]
-          // strong rain: byte3[3:0) as value[3:0]
+          // strong rain: byte3[7:4) as value[3:0]
           // 6 bits total
           val = ((packet[4] & 0x30) | (packet[3] >> 4));
         }
