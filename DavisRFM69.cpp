@@ -10,8 +10,8 @@
 // You are free to use/extend this library but please abide with the CC-BY-SA license:
 // http://creativecommons.org/licenses/by-sa/3.0/
 
-#include <DavisRFM69.h>
-#include <RFM69registers.h>
+#include "DavisRFM69.h"
+#include "RFM69registers.h"
 #include <SPI.h>
 
 volatile byte DavisRFM69::DATA[DAVIS_PACKET_LEN];

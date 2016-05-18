@@ -1,3 +1,4 @@
+#include <Arduino.h>
 
 #include <SPI.h>
 #include <EEPROM.h>
@@ -302,16 +303,16 @@ void decode_packet(RadioData* rd) {
       if (packet[3] == 0xff) {
         print_value("rainsecs", -1);
       } else {
-        if (packet[4] & 0x40) { // strong rain flag
-          // strong rain: byte4[5:4] as value[5:4]
-          // strong rain: byte3[3:0) as value[3:0]
-          // 6 bits total
-          val = ((packet[4] & 0x30) | (packet[3] >> 4));
-        } else { // light rain
+        if (packet[4] & 0x40) { // light rain flag
           // light rain: byte4[5:4] as value[9:8]
           // light rain: byte3[7:0) as value[7:0]
           // 10 bits total
           val = (packet[4] & 0x30) << 4 | packet[3];
+        } else { // strong rain
+          // strong rain: byte4[5:4] as value[5:4]
+          // strong rain: byte3[3:0) as value[3:0]
+          // 6 bits total
+          val = ((packet[4] & 0x30) | (packet[3] >> 4));
         }
         print_value("rainsecs", val);
       }
@@ -365,4 +366,3 @@ void printHex(volatile byte* packet, byte len) {
     if (i < len - 1) Serial.print('-');
   }
 }
-
