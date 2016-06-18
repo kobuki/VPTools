@@ -122,7 +122,7 @@ void setup() {
   rotationPeriod = WIND_DETECT_THRESH;
   lastTx = micros();
   attachInterrupt(WIND_INTERRUPT, windInterrupt, FALLING);
-  radio.initialize();
+  radio.initialize(FREQ_BAND_EU);
   radio.setTxMode(true); // enable tx params, default is false, call this before the first setChannel()
   radio.setChannel(0); // Frequency / Channel is *not* set in the initialization. Do it right after.
 #ifdef IS_RFM69HW
@@ -233,10 +233,9 @@ int calcWindSpeed(unsigned long period, int angle) {
 int calcWindSpeedEC(unsigned long period, int angle) {
 
   int eccolbase;
-  if (angle > 180) angle = 360 - angle; // EC is symmetric between E/W
+  if (angle > 180) angle = 360 - angle; // EC is symmetric between W/E (90/270°)
   eccolbase = (angle - 1) / 90; // avoiding oob errors; we just need the 2 fixed perp. angle column indices
-  angle = angle == 180 ? 90 : angle % 90; // difference is always 90 between EC points, we only need the angle between them
-                                          // 180 is special because EC values aren't equivalent at 0° and 180°
+  angle = (angle >= 90 && angle % 90 == 0) ? 90 : angle % 90; // angle difference is 90° between EC columns
 
   float mph = 1000000.0 / period * WIND_RPS_MPH; // (1 sec) / (period micros) * (majic constant by Davis)
 
@@ -250,10 +249,7 @@ int calcWindSpeedEC(unsigned long period, int angle) {
         im[1][icol].raw = windtab[0][eccolbase + icol];
         im[1][icol].real = 20.0;
     } else if (mph >= windtab[sizeof(windtab) - 1][eccolbase + icol]) { // no EC for values above 150 mph
-        im[0][icol].raw = 150;
-        im[0][icol].real = 150;
-        im[1][icol].raw = 150;
-        im[1][icol].real = 150;
+        return mph;
     } else { // find EC row for raw value for current angle column
         byte i;
         for (i = 0; mph > windtab[i][eccolbase + icol]; i++);
