@@ -9,6 +9,8 @@
 // it is released under the same Creative Commons Attrib Share-Alike License
 // You are free to use/extend this library but please abide with the CC-BY-SA license:
 // http://creativecommons.org/licenses/by-sa/3.0/
+//
+// In accordance with the CC-BY-SA, many modifications by GitHub user "kobuki".
 
 #include "DavisRFM69.h"
 #include "RFM69registers.h"
