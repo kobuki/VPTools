@@ -115,7 +115,7 @@ void handleRadioInt() {
     }
 
     // Phase 1: station discovery
-    // stay on a fixed channel and store last rx timestamp of discovered stations in station array
+    // step channels as usual in discovery mode too, and store last rx timestamp of discovered stations in station array
     // interval is used as 'station seen' flag
     if (stationsFound < numStations && stations[stIx].interval == 0) {
 
@@ -124,14 +124,10 @@ void handleRadioInt() {
       stations[stIx].lostPackets = 0;
       stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
       stationsFound++;
+      packets++;
+      fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, stations[stIx].interval); // add packets ASAP
       nextStation(); // skip to next station expected to tx
-
-      // reset current radio channel in Phase 1 or start Phase 2
-      if (stationsFound < numStations) {
-        radio.setChannel(radio.CHANNEL);
-      } else {
-        radio.setChannel(stations[curStation].channel);
-      }
+      radio.setChannel(stations[curStation].channel); // reset current radio channel
 
       return;
 
@@ -139,7 +135,7 @@ void handleRadioInt() {
 
       // Phase 2: normal reception
       // 8 received packet bytes including received CRC, the channel and RSSI go to the fifo
-      if (stationsFound == numStations && stations[curStation].active) {
+      if (stations[curStation].active) {
         packets++;
         fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastSeen);
       }
