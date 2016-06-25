@@ -7,8 +7,8 @@
 #include <TimerOne.h>
 #include <PacketFifo.h>
 
-#define LED           9  // Moteinos have LEDs on D9
-#define SERIAL_BAUD   115200
+#define LED 9 // Moteinos have LEDs on D9
+#define SERIAL_BAUD 115200
 
 #define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
@@ -20,15 +20,16 @@
 DavisRFM69 radio;
 
 PacketFifo fifo;
-volatile uint32_t packets, lostPackets, numResyncs;
+volatile uint32_t packets, lostPackets, numResyncs, lostStations;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
-volatile byte numStations = 2;
+volatile byte numStations = 3;
 
 // id, type, active
 Station stations[MAX_STATIONS] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
+  { 2, STYPE_TEMP_ONLY,   true },
 };
 
 void setup() {
@@ -75,14 +76,9 @@ void handleTimerInt() {
     }
   }
 
-  // find/set earliest expected rx channel or in Phase 1, reset radio on current channel
   if (readjust) {
     nextStation();
-    if (stationsFound < numStations) {
-      radio.setChannel(radio.CHANNEL);
-    } else {
-      radio.setChannel(stations[curStation].channel);
-    }
+    radio.setChannel(stations[curStation].channel);
   }
 
 }
@@ -114,45 +110,22 @@ void handleRadioInt() {
       return;
     }
 
-    // Phase 1: station discovery
-    // step channels as usual in discovery mode too, and store last rx timestamp of discovered stations in station array
-    // interval is used as 'station seen' flag
     if (stationsFound < numStations && stations[stIx].interval == 0) {
-
-      stations[stIx].channel = nextChannel(radio.CHANNEL);
-      stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
-      stations[stIx].lostPackets = 0;
       stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
       stationsFound++;
+    }
+
+    stations[stIx].lostPackets = 0;
+    stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
+    stations[stIx].channel = nextChannel(radio.CHANNEL);
+
+    if (stations[stIx].active) {
       packets++;
       fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, stations[stIx].interval); // add packets ASAP
-      nextStation(); // skip to next station expected to tx
-      radio.setChannel(stations[curStation].channel); // reset current radio channel
-
-      return;
-
-    } else {
-
-      // Phase 2: normal reception
-      // 8 received packet bytes including received CRC, the channel and RSSI go to the fifo
-      if (stations[curStation].active) {
-        packets++;
-        fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastSeen);
-      }
-
-      // successful reception - skip to next/earliest expected station
-      stations[curStation].lostPackets = 0;
-      stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
-      stations[curStation].channel = nextChannel(radio.CHANNEL);
-      nextStation();
-      if (stationsFound < numStations) { // Phase 1/2 check as usual
-        radio.setChannel(radio.CHANNEL);
-      } else {
-        radio.setChannel(stations[curStation].channel);
-      }
-
-      return;
     }
+
+    nextStation(); // skip to next station expected to tx
+    radio.setChannel(stations[curStation].channel); // reset current radio channel
 
   } else {
     radio.setChannel(radio.CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
