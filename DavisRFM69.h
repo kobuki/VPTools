@@ -309,17 +309,18 @@ static const uint8_t bandTabLengths[4] = {
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
-  byte id;                // station ID (set with the DIP switch on original equipment)
-                          // set it ONE LESS than advertised station id, eg. 0 for station 1 (default) etc.
-  byte type;              // STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
-  bool active;            // true when the station is actively listened to but ignored
-  byte repeaterId;        // repeater id when packet is coming via a repeater, otherwise 0
-                          // repeater IDs A..H are stored as 0x8..0xf here
-  byte channel;           // rx channel the next packet of the station is expected on
-  unsigned long lastRx;   // last time a packet is seen or should have been seen when missed
-  unsigned long lastSeen; // last factual reception time
-  unsigned long interval; // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
-  byte lostPackets;       // missed packets since a packet was last seen from this station
+  byte id;                	// station ID (set with the DIP switch on original equipment)
+                          	// set it ONE LESS than advertised station id, eg. 0 for station 1 (default) etc.
+  byte type;              	// STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
+  bool active;            	// true when the station is actively listened to but ignored
+  byte repeaterId;        	// repeater id when packet is coming via a repeater, otherwise 0
+                          	// repeater IDs A..H are stored as 0x8..0xf here
+  byte channel;           	// rx channel the next packet of the station is expected on
+  unsigned long lastRx;   	// last time a packet is seen or should have been seen when missed
+  unsigned long lastSeen; 	// last factual reception time
+  unsigned long interval;   // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
+  unsigned long numResyncs; // number of times discovery of this station started because of packet loss
+  byte lostPackets;         // missed packets since a packet was last seen from this station
 };
 
 // added these here because upstream removed them

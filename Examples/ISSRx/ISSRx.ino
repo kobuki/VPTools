@@ -64,16 +64,25 @@ void handleTimerInt() {
       if (stationsFound == numStations && stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
       if (stations[i].lostPackets > RESYNC_THRESHOLD) {
-        numResyncs++;
-        stationsFound = 0;
-        initStations();
-        return;
+        stations[i].numResyncs++;
+        stations[i].interval = 0;
+        stations[i].lostPackets = 0;
+        lostStations++;
+        stationsFound--;
       } else {
         stations[i].lastRx += stations[i].interval; // when packet should have been received
         stations[i].channel = nextChannel(stations[i].channel); // skip station's next channel in hop seq
         readjust = true;
       }
     }
+  }
+
+  if (lostStations == numStations) {
+    numResyncs++;
+    stationsFound = 0;
+    lostStations = 0;
+    initStations();
+    return;
   }
 
   if (readjust) {
@@ -113,16 +122,17 @@ void handleRadioInt() {
     if (stationsFound < numStations && stations[stIx].interval == 0) {
       stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
       stationsFound++;
+      if (lostStations > 0) lostStations--;
+    }
+
+    if (stations[stIx].active) {
+      packets++;
+      fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, stations[curStation].lastSeen > 0 ? lastRx - stations[curStation].lastSeen : 0);
     }
 
     stations[stIx].lostPackets = 0;
     stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
     stations[stIx].channel = nextChannel(radio.CHANNEL);
-
-    if (stations[stIx].active) {
-      packets++;
-      fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, stations[stIx].interval); // add packets ASAP
-    }
 
     nextStation(); // skip to next station expected to tx
     radio.setChannel(stations[curStation].channel); // reset current radio channel
@@ -166,6 +176,8 @@ void initStations() {
     stations[i].lastRx = 0;
     stations[i].interval = 0;
     stations[i].lostPackets = 0;
+    stations[i].lastRx = 0;
+    stations[i].lastSeen = 0;
   }
 }
 
