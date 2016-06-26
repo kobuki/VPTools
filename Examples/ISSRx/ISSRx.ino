@@ -61,7 +61,7 @@ void handleTimerInt() {
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
     if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
-      if (stationsFound == numStations && stations[curStation].active) lostPackets++;
+      if (stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
       if (stations[i].lostPackets > RESYNC_THRESHOLD) {
         stations[i].numResyncs++;
@@ -69,20 +69,19 @@ void handleTimerInt() {
         stations[i].lostPackets = 0;
         lostStations++;
         stationsFound--;
+        if (lostStations == numStations) {
+          numResyncs++;
+          stationsFound = 0;
+          lostStations = 0;
+          initStations();
+          return;
+        }
       } else {
         stations[i].lastRx += stations[i].interval; // when packet should have been received
         stations[i].channel = nextChannel(stations[i].channel); // skip station's next channel in hop seq
         readjust = true;
       }
     }
-  }
-
-  if (lostStations == numStations) {
-    numResyncs++;
-    stationsFound = 0;
-    lostStations = 0;
-    initStations();
-    return;
   }
 
   if (readjust) {
