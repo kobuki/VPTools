@@ -3,180 +3,35 @@
 #include <SPI.h>
 #include <EEPROM.h>
 
-#include <DavisRFM69.h>
-#include <TimerOne.h>
-#include <PacketFifo.h>
+#include <Wire.h>
+
+#include "DavisRFM69.h"
+#include "PacketFifo.h"
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
 
-#define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
-#define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
-#define POST_RX_WAIT 2000         // RX "settle" delay
-#define MAX_STATIONS 8            // max. stations this code is able to handle
-
-volatile uint32_t packets = 0;
-volatile uint32_t lostPackets = 0;
-volatile uint32_t numResyncs = 0;
-volatile uint32_t lostStations = 0;
-volatile byte stationsFound = 0;
-volatile byte curStation = 0;
-volatile byte numStations = 2;
-
 DavisRFM69 radio;
-PacketFifo fifo;
 
 // id, type, active
-Station stations[MAX_STATIONS] = {
+Station stations[3] = {
   { 0, STYPE_ISS,         true },
   { 1, STYPE_WLESS_ANEMO, true },
   { 2, STYPE_TEMP_ONLY,   true },
 };
 
+uint32_t t, lastBaro;
+
 void setup() {
   Serial.begin(SERIAL_BAUD);
+  radio.setStations(stations, 3);
   radio.initialize(FREQ_BAND_EU);
   radio.setBandwidth(RF69_DAVIS_BW_NARROW);
-  fifo.flush();
-  initStations();
-  Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection
-  Timer1.attachInterrupt(handleTimerInt, 0);
-  radio.setUserInterrupt(handleRadioInt);
 }
 
 void loop() {
-  if (fifo.hasElements()) {
-    decode_packet(fifo.dequeue());
-  }
-}
-
-// Handle missed packets. Called from Timer1 ISR every ms
-void handleTimerInt() {
-
-  uint32_t lastRx = micros();
-  bool readjust = false;
-
-  // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
-  // that is, find missed packets
-  for (byte i = 0; i < numStations; i++) {
-    if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
-      if (stations[curStation].active) lostPackets++;
-      stations[i].lostPackets++;
-      if (stations[i].lostPackets > RESYNC_THRESHOLD) {
-        stations[i].numResyncs++;
-        stations[i].interval = 0;
-        stations[i].lostPackets = 0;
-        lostStations++;
-        stationsFound--;
-        if (lostStations == numStations) {
-          numResyncs++;
-          stationsFound = 0;
-          lostStations = 0;
-          initStations();
-          return;
-        }
-      } else {
-        stations[i].lastRx += stations[i].interval; // when packet should have been received
-        stations[i].channel = nextChannel(stations[i].channel); // skip station's next channel in hop seq
-        readjust = true;
-      }
-    }
-  }
-
-  if (readjust) {
-    nextStation();
-    radio.setChannel(stations[curStation].channel);
-  }
-
-}
-
-// Handle received packets, called from RFM69 ISR
-void handleRadioInt() {
-
-  uint32_t lastRx = micros();
-
-  uint16_t rxCrc = word(radio.DATA[6], radio.DATA[7]);  // received CRC
-  uint16_t calcCrc = radio.crc16_ccitt(radio.DATA, 6);  // calculated CRC
-
-  delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
-                                   // probably needed by the module to settle something after RX
-
-  // fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, lastRx - stations[curStation].lastRx);
-
-  // packet passed crc?
-  if (calcCrc == rxCrc && rxCrc != 0) {
-
-    // station id is byte 0:0-2
-    byte id = radio.DATA[0] & 7;
-    int stIx = findStation(id);
-
-    // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
-    if (stIx < 0) {
-      radio.setChannel(radio.CHANNEL);
-      return;
-    }
-
-    if (stationsFound < numStations && stations[stIx].interval == 0) {
-      stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
-      stationsFound++;
-      if (lostStations > 0) lostStations--;
-    }
-
-    if (stations[stIx].active) {
-      packets++;
-      fifo.queue((byte*)radio.DATA, radio.CHANNEL, -radio.RSSI, radio.FEI, stations[curStation].lastSeen > 0 ? lastRx - stations[curStation].lastSeen : 0);
-    }
-
-    stations[stIx].lostPackets = 0;
-    stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
-    stations[stIx].channel = nextChannel(radio.CHANNEL);
-
-    nextStation(); // skip to next station expected to tx
-    radio.setChannel(stations[curStation].channel); // reset current radio channel
-
-  } else {
-    radio.setChannel(radio.CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
-  }
-
-}
-
-// Calculate the next hop of the specified channel
-byte nextChannel(byte channel) {
-  return ++channel % radio.getBandTabLength();
-}
-
-// Find the station index in stations[] for station expected to tx the earliest and update curStation
-void nextStation() {
-  uint32_t earliest = 0xffffffff;
-  uint32_t now = micros();
-  for (int i = 0; i < numStations; i++) {
-    uint32_t current = stations[i].lastRx + stations[i].interval - now;
-    if (stations[i].interval > 0 && current < earliest) {
-      earliest = current;
-      curStation = i;
-    }
-  }
-}
-
-// Find station index in stations[] for a station ID (-1 if doesn't exist)
-int findStation(byte id) {
-  for (byte i = 0; i < numStations; i++) {
-    if (stations[i].id == id) return i;
-  }
-  return -1;
-}
-
-// Reset station array to safe defaults
-void initStations() {
-  for (byte i = 0; i < numStations; i++) {
-    stations[i].channel = 0;
-    stations[i].lastRx = 0;
-    stations[i].interval = 0;
-    stations[i].lostPackets = 0;
-    stations[i].lastRx = 0;
-    stations[i].lastSeen = 0;
-    stations[i].packets = 0;
-    stations[i].missedPackets = 0;
+  if (radio.fifo.hasElements()) {
+    decode_packet(radio.fifo.dequeue());
   }
 }
 
@@ -217,11 +72,11 @@ void decode_packet(RadioData* rd) {
   print_value(" station", packet[0] & 0x7);
 
   Serial.print(F("packets:"));
-  Serial.print(packets);
+  Serial.print(radio.packets);
   Serial.print('/');
-  Serial.print(lostPackets);
+  Serial.print(radio.lostPackets);
   Serial.print('/');
-  Serial.print((float)(packets * 100.0 / (packets + lostPackets)));
+  Serial.print((float)(radio.packets * 100.0 / (radio.packets + radio.lostPackets)));
   Serial.print(' ');
 
   print_value("channel", rd->channel);
@@ -234,7 +89,7 @@ void decode_packet(RadioData* rd) {
   // It's the CPE's responsibility to interpret our output accordingly.
 
   byte id = radio.DATA[0] & 7;
-  int stIx = findStation(id);
+  int stIx = radio.findStation(id);
 
   // wind data is present in every packet, windd == 0 (packet[2] == 0) means there's no anemometer
   if (packet[2] != 0) {

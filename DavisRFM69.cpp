@@ -14,6 +14,9 @@
 
 #include "DavisRFM69.h"
 #include "RFM69registers.h"
+#include "TimerOne.h"
+#include "PacketFifo.h"
+
 #include <SPI.h>
 
 volatile byte DavisRFM69::DATA[DAVIS_PACKET_LEN];
@@ -24,6 +27,18 @@ volatile byte DavisRFM69::band = 0;
 volatile int DavisRFM69::RSSI;   // RSSI measured immediately after payload reception
 volatile int16_t DavisRFM69::FEI;
 volatile bool DavisRFM69::txMode = false;
+
+volatile uint32_t DavisRFM69::packets = 0;
+volatile uint32_t DavisRFM69::lostPackets = 0;
+volatile uint32_t DavisRFM69::numResyncs = 0;
+volatile uint32_t DavisRFM69::lostStations = 0;
+volatile byte DavisRFM69::stationsFound = 0;
+volatile byte DavisRFM69::curStation = 0;
+volatile byte DavisRFM69::numStations = 2;
+
+PacketFifo DavisRFM69::fifo;
+Station *DavisRFM69::stations;
+
 DavisRFM69* DavisRFM69::selfPointer;
 
 void DavisRFM69::initialize(byte freqBand)
@@ -103,6 +118,147 @@ void DavisRFM69::initialize(byte freqBand)
 
   setBand(freqBand);
   setChannel(0);
+
+  fifo.flush();
+  initStations();
+
+  Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection
+  Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
+}
+
+void DavisRFM69::setStations(Station *_stations, byte n) {
+  stations = _stations;
+  numStations = n;
+}
+
+// Handle missed packets. Called from Timer1 ISR every ms
+void DavisRFM69::handleTimerInt() {
+
+  uint32_t lastRx = micros();
+  bool readjust = false;
+
+  // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
+  // that is, find missed packets
+  for (byte i = 0; i < numStations; i++) {
+    if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
+      if (stations[curStation].active) lostPackets++;
+      stations[i].lostPackets++;
+      if (stations[i].lostPackets > RESYNC_THRESHOLD) {
+        stations[i].numResyncs++;
+        stations[i].interval = 0;
+        stations[i].lostPackets = 0;
+        lostStations++;
+        stationsFound--;
+        if (lostStations == numStations) {
+          numResyncs++;
+          stationsFound = 0;
+          lostStations = 0;
+          selfPointer->initStations();
+          return;
+        }
+      } else {
+        stations[i].lastRx += stations[i].interval; // when packet should have been received
+        stations[i].channel = selfPointer->nextChannel(stations[i].channel); // skip station's next channel in hop seq
+        readjust = true;
+      }
+    }
+  }
+
+  if (readjust) {
+    selfPointer->nextStation();
+    selfPointer->setChannel(stations[curStation].channel);
+  }
+
+}
+
+// Handle received packets, called from RFM69 ISR
+void DavisRFM69::handleRadioInt() {
+
+  uint32_t lastRx = micros();
+
+  uint16_t rxCrc = word(DATA[6], DATA[7]);  // received CRC
+  uint16_t calcCrc = DavisRFM69::crc16_ccitt(DATA, 6);  // calculated CRC
+
+  delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
+                                   // probably needed by the module to settle something after RX
+
+  // fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, lastRx - stations[curStation].lastRx);
+
+  // packet passed crc?
+  if (calcCrc == rxCrc && rxCrc != 0) {
+
+    // station id is byte 0:0-2
+    byte id = DATA[0] & 7;
+    int stIx = findStation(id);
+
+    // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
+    if (stIx < 0) {
+      setChannel(CHANNEL);
+      return;
+    }
+
+    if (stationsFound < numStations && stations[stIx].interval == 0) {
+      stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
+      stationsFound++;
+      if (lostStations > 0) lostStations--;
+    }
+
+    if (stations[stIx].active) {
+      packets++;
+      fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, stations[curStation].lastSeen > 0 ? lastRx - stations[curStation].lastSeen : 0);
+    }
+
+    stations[stIx].lostPackets = 0;
+    stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
+    stations[stIx].channel = nextChannel(CHANNEL);
+
+    nextStation(); // skip to next station expected to tx
+    setChannel(stations[curStation].channel); // reset current radio channel
+
+  } else {
+    setChannel(CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
+  }
+
+}
+
+// Calculate the next hop of the specified channel
+byte DavisRFM69::nextChannel(byte channel) {
+  return ++channel % getBandTabLength();
+}
+
+// Find the station index in stations[] for station expected to tx the earliest and update curStation
+void DavisRFM69::nextStation() {
+  uint32_t earliest = 0xffffffff;
+  uint32_t now = micros();
+  for (int i = 0; i < numStations; i++) {
+    uint32_t current = stations[i].lastRx + stations[i].interval - now;
+    if (stations[i].interval > 0 && current < earliest) {
+      earliest = current;
+      curStation = i;
+    }
+  }
+}
+
+// Find station index in stations[] for a station ID (-1 if doesn't exist)
+int DavisRFM69::findStation(byte id) {
+  for (byte i = 0; i < numStations; i++) {
+    if (stations[i].id == id) return i;
+  }
+  return -1;
+}
+
+// Reset station array to safe defaults
+void DavisRFM69::initStations() {
+  for (byte i = 0; i < numStations; i++) {
+    stations[i].channel = 0;
+    stations[i].lastRx = 0;
+    stations[i].interval = 0;
+    stations[i].lostPackets = 0;
+    stations[i].lastRx = 0;
+    stations[i].lastSeen = 0;
+    stations[i].packets = 0;
+    stations[i].missedPackets = 0;
+  }
 }
 
 void DavisRFM69::interruptHandler() {
@@ -117,7 +273,9 @@ void DavisRFM69::interruptHandler() {
     for (byte i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(SPI.transfer(0));
 
     _packetReceived = true;
-    if (userInterrupt != NULL) (*userInterrupt)();
+
+    handleRadioInt();
+
     unselect();  // Unselect RFM69 module, enabling interrupts
   }
 }
@@ -398,11 +556,6 @@ void DavisRFM69::setTxMode(bool txMode)
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
     writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN - 1));
   }
-}
-
-void DavisRFM69::setUserInterrupt(void (*function)())
-{
-  userInterrupt = function;
 }
 
 void DavisRFM69::setBand(byte newBand)
