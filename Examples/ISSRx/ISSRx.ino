@@ -15,15 +15,16 @@
 #define POST_RX_WAIT 2000         // RX "settle" delay
 #define MAX_STATIONS 8            // max. stations this code is able to handle
 
-#define ROM_CONFIG_OFFSET = 0
-
-DavisRFM69 radio;
-
-PacketFifo fifo;
-volatile uint32_t packets, lostPackets, numResyncs, lostStations;
+volatile uint32_t packets = 0;
+volatile uint32_t lostPackets = 0;
+volatile uint32_t numResyncs = 0;
+volatile uint32_t lostStations = 0;
 volatile byte stationsFound = 0;
 volatile byte curStation = 0;
-volatile byte numStations = 3;
+volatile byte numStations = 2;
+
+DavisRFM69 radio;
+PacketFifo fifo;
 
 // id, type, active
 Station stations[MAX_STATIONS] = {
@@ -43,8 +44,6 @@ void setup() {
   radio.setUserInterrupt(handleRadioInt);
 }
 
-char f = 0;
-
 void loop() {
   if (fifo.hasElements()) {
     decode_packet(fifo.dequeue());
@@ -54,7 +53,7 @@ void loop() {
 // Handle missed packets. Called from Timer1 ISR every ms
 void handleTimerInt() {
 
-  unsigned long lastRx = micros();
+  uint32_t lastRx = micros();
   bool readjust = false;
 
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
@@ -94,12 +93,11 @@ void handleTimerInt() {
 // Handle received packets, called from RFM69 ISR
 void handleRadioInt() {
 
-  unsigned long lastRx = micros();
+  uint32_t lastRx = micros();
 
-  unsigned int rxCrc = word(radio.DATA[6], radio.DATA[7]);  // received CRC
-  unsigned int calcCrc = radio.crc16_ccitt(radio.DATA, 6);  // calculated CRC
+  uint16_t rxCrc = word(radio.DATA[6], radio.DATA[7]);  // received CRC
+  uint16_t calcCrc = radio.crc16_ccitt(radio.DATA, 6);  // calculated CRC
 
-  f = 1;
   delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
                                    // probably needed by the module to settle something after RX
 
@@ -149,10 +147,10 @@ byte nextChannel(byte channel) {
 
 // Find the station index in stations[] for station expected to tx the earliest and update curStation
 void nextStation() {
-  unsigned long earliest = 0xffffffff;
-  unsigned long now = micros();
+  uint32_t earliest = 0xffffffff;
+  uint32_t now = micros();
   for (int i = 0; i < numStations; i++) {
-    unsigned long current = stations[i].lastRx + stations[i].interval - now;
+    uint32_t current = stations[i].lastRx + stations[i].interval - now;
     if (stations[i].interval > 0 && current < earliest) {
       earliest = current;
       curStation = i;
@@ -177,6 +175,8 @@ void initStations() {
     stations[i].lostPackets = 0;
     stations[i].lastRx = 0;
     stations[i].lastSeen = 0;
+    stations[i].packets = 0;
+    stations[i].missedPackets = 0;
   }
 }
 
@@ -204,7 +204,7 @@ void print_value(char* vname, long value) {
   Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 
-void print_value(char* vname, unsigned long value) {
+void print_value(char* vname, uint32_t value) {
   Serial.print(vname); Serial.print(F(":")); Serial.print(value); Serial.print(' ');
 }
 

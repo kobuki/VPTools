@@ -147,7 +147,7 @@ void DavisRFM69::sendFrame(const void* buffer)
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00); // DIO0 is "Packet Sent"
 
   // calculate crc on first 6 bytes (no repeater info)
-  unsigned int crc = crc16_ccitt((volatile byte *)buffer, 6);
+  uint16_t crc = crc16_ccitt((volatile byte *)buffer, 6);
   // write to FIFO
   select();
   SPI.transfer(REG_FIFO | 0x80);
@@ -217,9 +217,9 @@ byte DavisRFM69::reverseBits(byte b)
 }
 
 // Davis CRC calculation from http://www.menie.org/georges/embedded/
-unsigned int DavisRFM69::crc16_ccitt(volatile byte *buf, byte len, unsigned int initCrc)
+uint16_t DavisRFM69::crc16_ccitt(volatile byte *buf, byte len, uint16_t initCrc)
 {
-  unsigned int crc = initCrc;
+  uint16_t crc = initCrc;
   while( len-- ) {
     int i;
     crc ^= *(char *)buf++ << 8;

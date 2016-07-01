@@ -56,7 +56,7 @@ class DavisRFM69 {
     static volatile byte hopIndex;
     void setChannel(byte channel);
     void hop();
-    unsigned int crc16_ccitt(volatile byte *buf, byte len, unsigned int initCrc = 0);
+    uint16_t crc16_ccitt(volatile byte *buf, byte len, uint16_t initCrc = 0);
 
     void initialize(byte freqBand);
     bool canSend();
@@ -316,10 +316,12 @@ typedef struct __attribute__((packed)) Station {
   byte repeaterId;        	// repeater id when packet is coming via a repeater, otherwise 0
                           	// repeater IDs A..H are stored as 0x8..0xf here
   byte channel;           	// rx channel the next packet of the station is expected on
-  unsigned long lastRx;   	// last time a packet is seen or should have been seen when missed
-  unsigned long lastSeen; 	// last factual reception time
-  unsigned long interval;   // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
-  unsigned long numResyncs; // number of times discovery of this station started because of packet loss
+  uint32_t lastRx;   	 	// last time a packet is seen or should have been seen when missed
+  uint32_t lastSeen; 	 	// last factual reception time
+  uint32_t interval;    	// packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
+  uint32_t numResyncs;  	// number of times discovery of this station started because of packet loss
+  uint32_t packets; 		// number of received packets
+  uint32_t missedPackets;	// number of misssed packets
   byte lostPackets;         // missed packets since a packet was last seen from this station
 };
 
