@@ -36,7 +36,7 @@
 #define COURSE_TEMP_COEF    -90 // puts the temperature reading in the ballpark, user can fine tune the returned value
 #define RF69_FSTEP 61.03515625 	// == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
 
-#define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before a full rediscovery
+#define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
 #define POST_RX_WAIT 2000         // RX "settle" delay
 #define MAX_STATIONS 8            // max. stations this code is able to handle
@@ -54,8 +54,8 @@ typedef struct __attribute__((packed)) Station {
   uint32_t lastSeen; 	 	// last factual reception time
   uint32_t interval;    	// packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
   uint32_t numResyncs;  	// number of times discovery of this station started because of packet loss
-  uint32_t packets; 		// number of received packets
-  uint32_t missedPackets;	// number of misssed packets
+  uint32_t packets; 		// total number of received packets after (re)restart
+  uint32_t missedPackets;	// total number of misssed packets after (re)restart
   byte lostPackets;         // missed packets since a packet was last seen from this station
 };
 
@@ -124,6 +124,8 @@ class DavisRFM69 {
 
 	static void handleTimerInt();
 	static void setStations(Station *_stations, byte n);
+	void stopReceiver();
+	void setRssiThreshold(int rssiThreshold);
 
   protected:
     static volatile bool txMode;

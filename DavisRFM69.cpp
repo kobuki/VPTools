@@ -34,7 +34,7 @@ volatile uint32_t DavisRFM69::numResyncs = 0;
 volatile uint32_t DavisRFM69::lostStations = 0;
 volatile byte DavisRFM69::stationsFound = 0;
 volatile byte DavisRFM69::curStation = 0;
-volatile byte DavisRFM69::numStations = 2;
+volatile byte DavisRFM69::numStations = 1;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
@@ -75,7 +75,7 @@ void DavisRFM69::initialize(byte freqBand)
     /* 0x26 RegDioMapping2 */
     /* 0x27 RegIRQFlags1 */
     /* 0x28 */ { REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN }, // Reset the FIFOs. Fixes a problem I had with bad first packet.
-    /* 0x29 */ { REG_RSSITHRESH, 190 }, //must be set to dBm = (-Sensitivity / 2) - default is 0xE4=228 so -114dBm
+    /* 0x29 */ { REG_RSSITHRESH, 190 }, // real dBm = -(REG_RSSITHRESH / 2) -> 190 raw = -95 dBm
     /* 0x2a & 0x2b RegRxTimeout1 and 2, respectively */
     /* 0x2c RegPreambleMsb - use zero default */
     /* 0x2d */ { REG_PREAMBLELSB, 0x4 }, // Davis has four preamble bytes 0xAAAAAAAA -- use 6 for TX for this setup
@@ -126,6 +126,11 @@ void DavisRFM69::initialize(byte freqBand)
   Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
 }
 
+void DavisRFM69::stopReceiver() {
+  Timer1.detachInterrupt();
+  setMode(RF69_MODE_SLEEP);
+}
+
 void DavisRFM69::setStations(Station *_stations, byte n) {
   stations = _stations;
   numStations = n;
@@ -143,6 +148,7 @@ void DavisRFM69::handleTimerInt() {
     if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
       if (stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
+      stations[i].missedPackets++;
       if (stations[i].lostPackets > RESYNC_THRESHOLD) {
         stations[i].numResyncs++;
         stations[i].interval = 0;
@@ -205,6 +211,7 @@ void DavisRFM69::handleRadioInt() {
 
     if (stations[stIx].active) {
       packets++;
+	  stations[stIx].packets++;
       fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, stations[curStation].lastSeen > 0 ? lastRx - stations[curStation].lastSeen : 0);
     }
 
@@ -443,6 +450,10 @@ void DavisRFM69::receiveBegin() {
 
 bool DavisRFM69::receiveDone() {
   return _packetReceived;
+}
+
+void DavisRFM69::setRssiThreshold(int rssiThreshold) {
+  writeReg(REG_RSSIVALUE, abs(rssiThreshold) << 1);
 }
 
 int DavisRFM69::readRSSI(bool forceTrigger) {
