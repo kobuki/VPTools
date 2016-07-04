@@ -126,6 +126,7 @@ class DavisRFM69 {
 	static void setStations(Station *_stations, byte n);
 	void stopReceiver();
 	void setRssiThreshold(int rssiThreshold);
+	void setRssiThresholdRaw(int rssiThresholdRaw);
 
   protected:
     static volatile bool txMode;

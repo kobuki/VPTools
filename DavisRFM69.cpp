@@ -181,9 +181,16 @@ void DavisRFM69::handleTimerInt() {
 void DavisRFM69::handleRadioInt() {
 
   uint32_t lastRx = micros();
-
   uint16_t rxCrc = word(DATA[6], DATA[7]);  // received CRC
   uint16_t calcCrc = DavisRFM69::crc16_ccitt(DATA, 6);  // calculated CRC
+
+  bool repeaterCrcTried = false;
+
+  // repeater packets checksum bytes (0..5) and (8..9), so try this at mismatch
+  if (calcCrc != rxCrc) {
+    calcCrc = DavisRFM69::crc16_ccitt(DATA + 8, 2, calcCrc);
+	repeaterCrcTried = true;
+  }
 
   delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
                                    // probably needed by the module to settle something after RX
@@ -198,7 +205,11 @@ void DavisRFM69::handleRadioInt() {
     int stIx = findStation(id);
 
     // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
-    if (stIx < 0) {
+	// OR packet passed the repeater crc check, but no repeater is set for the station
+	// OR packet passed the normal crc check, and repeater is set for the station
+    if (stIx < 0
+        || (repeaterCrcTried && stations[stIx].repeaterId == 0)
+        || (!repeaterCrcTried && stations[stIx].repeaterId != 0)) {
       setChannel(CHANNEL);
       return;
     }
@@ -454,6 +465,10 @@ bool DavisRFM69::receiveDone() {
 
 void DavisRFM69::setRssiThreshold(int rssiThreshold) {
   writeReg(REG_RSSIVALUE, abs(rssiThreshold) << 1);
+}
+
+void DavisRFM69::setRssiThresholdRaw(int rssiThresholdRaw) {
+  writeReg(REG_RSSIVALUE, rssiThresholdRaw);
 }
 
 int DavisRFM69::readRSSI(bool forceTrigger) {
