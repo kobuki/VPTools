@@ -142,6 +142,12 @@ void DavisRFM69::handleTimerInt() {
   uint32_t lastRx = micros();
   bool readjust = false;
 
+  if (stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
+      && CHANNEL != stations[curStation].channel) {
+    selfPointer->setChannel(stations[curStation].channel);
+	return;
+  }
+
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
@@ -160,6 +166,7 @@ void DavisRFM69::handleTimerInt() {
           stationsFound = 0;
           lostStations = 0;
           selfPointer->initStations();
+		  selfPointer->setChannel(0);
           return;
         }
       } else {
@@ -230,8 +237,12 @@ void DavisRFM69::handleRadioInt() {
     stations[stIx].lastRx = stations[stIx].lastSeen = lastRx;
     stations[stIx].channel = nextChannel(CHANNEL);
 
-    nextStation(); // skip to next station expected to tx
-    setChannel(stations[curStation].channel); // reset current radio channel
+    nextStation(); // skip curStation to next station expected to tx
+    if (stationsFound < numStations && (stations[curStation].lastRx + stations[curStation].interval) - lastRx > DISCOVERY_MINGAP) {
+      setChannel(0);
+    } else {
+      setChannel(stations[curStation].channel); // reset current radio channel
+    }
 
   } else {
     setChannel(CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets

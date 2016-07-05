@@ -41,6 +41,9 @@
 #define POST_RX_WAIT 2000         // RX "settle" delay
 #define MAX_STATIONS 8            // max. stations this code is able to handle
 
+#define DISCOVERY_MINGAP 30 * 1000
+#define DISCOVERY_GUARD  10 * 1000
+
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
   byte id;                	// station ID (set with the DIP switch on original equipment)
