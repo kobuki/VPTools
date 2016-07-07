@@ -97,7 +97,7 @@ void decode_packet(RadioData* rd) {
       val = (packet[2] << 1) | (packet[4] & 2) >> 1;
       val = round(val * 360 / 512);
     } else {
-      val = 9 + round(342.0 * packet[2] / 255.0);
+      val = 9 + round((packet[2] - 1) * 342.0 / 255.0);
     }
   } else {
     val = 0;
