@@ -109,20 +109,20 @@ void decode_packet(RadioData* rd) {
   switch (packet[0] >> 4) {
 
     case VP2P_UV:
-      if (packet[3] == 0xff) {
-        print_value("uv", -1);
-      } else {
-        val = ((packet[3] << 8 | packet[4]) >> 6) - 1;
+      val = (packet[3] << 8 | packet[4]) >> 6;
+      if (val < 0x3ff) {
         print_value("uv", (float)(val / 50.0));
+      } else {
+        print_value("uv", -1);
       }
       break;
 
     case VP2P_SOLAR:
-      if (packet[3] == 0xff) {
-        print_value("solar", -1);
+      val = (packet[3] << 8 | packet[4]) >> 6;
+      if (packet[3] < 0x3fe) {
+        print_value("solar", (float)(val * 1.757936));
       } else {
-        val = ((packet[3] << 8 | packet[4]) >> 6) - 1;
-        print_value("solar", (float)(val / 0.5675));
+        print_value("solar", -1);
       }
       break;
 
@@ -175,17 +175,19 @@ void decode_packet(RadioData* rd) {
       break;
 
     case VP2P_SOIL_LEAF:
-      print_value("soilleaf", -1); // no public documentation of the packet type yet
+      // currently not processed but algorithm is known
+      // see https://github.com/matthewwall/weewx-meteostick/blob/master/bin/user/meteostick.py
+      print_value("soilleaf", -1);
       break;
 
     case VUEP_VCAP:
       val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
-      print_value("vcap", (float)(val / 100.0));
+      print_value("vcap", (float)(val / 300.0));
       break;
 
     case VUEP_VSOLAR:
       val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
-      print_value("vsolar", val);
+      print_value("vsolar", (float)(val / 300.0));
   }
 
   print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
