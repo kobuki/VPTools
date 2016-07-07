@@ -35,6 +35,7 @@ volatile uint32_t DavisRFM69::lostStations = 0;
 volatile byte DavisRFM69::stationsFound = 0;
 volatile byte DavisRFM69::curStation = 0;
 volatile byte DavisRFM69::numStations = 1;
+volatile byte DavisRFM69::discChannel = 0;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
@@ -161,12 +162,13 @@ void DavisRFM69::handleTimerInt() {
         stations[i].lostPackets = 0;
         lostStations++;
         stationsFound--;
+        discChannel = ++discChannel % selfPointer->getBandTabLength();
         if (lostStations == numStations) {
           numResyncs++;
           stationsFound = 0;
           lostStations = 0;
           selfPointer->initStations();
-		  selfPointer->setChannel(0);
+          selfPointer->setChannel(discChannel);
           return;
         }
       } else {
@@ -239,7 +241,7 @@ void DavisRFM69::handleRadioInt() {
 
     nextStation(); // skip curStation to next station expected to tx
     if (stationsFound < numStations && (stations[curStation].lastRx + stations[curStation].interval) - lastRx > DISCOVERY_MINGAP) {
-      setChannel(0);
+      setChannel(discChannel);
     } else {
       setChannel(stations[curStation].channel); // reset current radio channel
     }

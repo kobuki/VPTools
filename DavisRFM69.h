@@ -80,6 +80,7 @@ class DavisRFM69 {
 	static volatile byte curStation;
 	static volatile byte numStations;
     static volatile byte hopIndex;
+    static volatile byte discChannel;
 
 	static PacketFifo fifo;
 	static Station *stations;
