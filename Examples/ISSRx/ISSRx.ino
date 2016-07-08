@@ -107,7 +107,7 @@ void decode_packet(RadioData* rd) {
   switch (packet[0] >> 4) {
 
     case VP2P_UV:
-      val = (packet[3] << 8 | packet[4]) >> 6;
+      val = word(packet[3], packet[4]) >> 6;
       if (val < 0x3ff) {
         print_value("uv", (float)(val / 50.0));
       } else {
@@ -116,8 +116,8 @@ void decode_packet(RadioData* rd) {
       break;
 
     case VP2P_SOLAR:
-      val = (packet[3] << 8 | packet[4]) >> 6;
-      if (packet[3] < 0x3fe) {
+      val = word(packet[3], packet[4]) >> 6;
+      if (val < 0x3fe) {
         print_value("solar", (float)(val * 1.757936));
       } else {
         print_value("solar", -1);

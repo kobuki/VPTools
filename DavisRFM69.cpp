@@ -118,12 +118,12 @@ void DavisRFM69::initialize(byte freqBand)
   userInterrupt = NULL;
 
   setBand(freqBand);
-  setChannel(0);
+  setChannel(discChannel);
 
   fifo.flush();
   initStations();
 
-  Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection
+  Timer1.initialize(2000); // periodical interrupts every 2 ms for missed packet detection and other checks
   Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
 }
 
@@ -143,7 +143,8 @@ void DavisRFM69::handleTimerInt() {
   uint32_t lastRx = micros();
   bool readjust = false;
 
-  if (stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
+  if (stations[curStation].interval > 0
+	  && stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
       && CHANNEL != stations[curStation].channel) {
     selfPointer->setChannel(stations[curStation].channel);
 	return;
@@ -240,7 +241,8 @@ void DavisRFM69::handleRadioInt() {
     stations[stIx].channel = nextChannel(CHANNEL);
 
     nextStation(); // skip curStation to next station expected to tx
-    if (stationsFound < numStations && (stations[curStation].lastRx + stations[curStation].interval) - lastRx > DISCOVERY_MINGAP) {
+
+    if (stationsFound < numStations && stations[curStation].lastRx + stations[curStation].interval - lastRx > DISCOVERY_MINGAP) {
       setChannel(discChannel);
     } else {
       setChannel(stations[curStation].channel); // reset current radio channel
