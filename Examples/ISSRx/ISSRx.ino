@@ -20,8 +20,6 @@ Station stations[3] = {
   { 2, STYPE_TEMP_ONLY,   true },
 };
 
-uint32_t t, lastBaro;
-
 void setup() {
   Serial.begin(SERIAL_BAUD);
   radio.setStations(stations, 3);
