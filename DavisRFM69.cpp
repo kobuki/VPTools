@@ -36,10 +36,10 @@ volatile byte DavisRFM69::stationsFound = 0;
 volatile byte DavisRFM69::curStation = 0;
 volatile byte DavisRFM69::numStations = 1;
 volatile byte DavisRFM69::discChannel = 0;
+volatile uint32_t DavisRFM69::lastDiscStep;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
-
 DavisRFM69* DavisRFM69::selfPointer;
 
 void DavisRFM69::initialize(byte freqBand)
@@ -122,6 +122,7 @@ void DavisRFM69::initialize(byte freqBand)
 
   fifo.flush();
   initStations();
+  lastDiscStep = micros();
 
   Timer1.initialize(2000); // periodical interrupts every 2 ms for missed packet detection and other checks
   Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
@@ -150,6 +151,11 @@ void DavisRFM69::handleTimerInt() {
 	return;
   }
 
+  if (lastRx - lastDiscStep > DISCOVERY_STEP) {
+    discChannel = selfPointer->nextChannel(discChannel);
+    lastDiscStep = lastRx;
+  }
+
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
@@ -163,7 +169,6 @@ void DavisRFM69::handleTimerInt() {
         stations[i].lostPackets = 0;
         lostStations++;
         stationsFound--;
-        discChannel = ++discChannel % selfPointer->getBandTabLength();
         if (lostStations == numStations) {
           numResyncs++;
           stationsFound = 0;
@@ -184,7 +189,6 @@ void DavisRFM69::handleTimerInt() {
     selfPointer->nextStation();
     selfPointer->setChannel(stations[curStation].channel);
   }
-
 }
 
 // Handle received packets, called from RFM69 ISR

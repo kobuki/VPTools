@@ -43,6 +43,7 @@
 
 #define DISCOVERY_MINGAP 70000L
 #define DISCOVERY_GUARD  60000L
+#define DISCOVERY_STEP   150000000L
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
@@ -81,6 +82,7 @@ class DavisRFM69 {
 	static volatile byte numStations;
     static volatile byte hopIndex;
     static volatile byte discChannel;
+	static volatile uint32_t lastDiscStep;
 
 	static PacketFifo fifo;
 	static Station *stations;
