@@ -292,7 +292,7 @@ void cmdTransmitter(char *s)
 void cmdFilter(char *s)
 {
   if (s[0] == '1') {
-  printStatusF(S_OK, F("filter on"));
+    printStatusF(S_OK, F("filter on"));
   } else {
     printStatusF(S_ERR, F("unimplemented"));
   }
