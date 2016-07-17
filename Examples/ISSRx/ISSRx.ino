@@ -133,20 +133,13 @@ void decode_packet(RadioData* rd) {
       break;
 
     case VP2P_RAINSECS:
-      if (packet[3] == 0xff) {
+      // light rain:  byte4[5:4] as value[9:8] and byte3[7:0] as value[7:0] - 10 bits total
+      // strong rain: byte4[5:4] as value[5:4] and byte3[7:4] as value[3:0] - 6 bits total
+      val = (packet[4] & 0x30) << 4 | packet[3];
+      if (val == 0x3ff) {
         print_value("rainsecs", -1);
       } else {
-        if (packet[4] & 0x40) { // light rain flag
-          // light rain: byte4[5:4] as value[9:8]
-          // light rain: byte3[7:0) as value[7:0]
-          // 10 bits total
-          val = (packet[4] & 0x30) << 4 | packet[3];
-        } else { // strong rain
-          // strong rain: byte4[5:4] as value[5:4]
-          // strong rain: byte3[7:4) as value[3:0]
-          // 6 bits total
-          val = ((packet[4] & 0x30) | (packet[3] >> 4));
-        }
+        if (packet[4] & 0x40 == 0) val >>= 4; // packet[4] bit 6: strong == 0, light == 1
         print_value("rainsecs", val);
       }
       break;
