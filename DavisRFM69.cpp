@@ -34,7 +34,7 @@ volatile uint32_t DavisRFM69::numResyncs = 0;
 volatile uint32_t DavisRFM69::lostStations = 0;
 volatile byte DavisRFM69::stationsFound = 0;
 volatile byte DavisRFM69::curStation = 0;
-volatile byte DavisRFM69::numStations = 1;
+volatile byte DavisRFM69::numStations = 0;
 volatile byte DavisRFM69::discChannel = 0;
 volatile uint32_t DavisRFM69::lastDiscStep;
 
