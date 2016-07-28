@@ -139,7 +139,7 @@ void decode_packet(RadioData* rd) {
       if (val == 0x3ff) {
         print_value("rainsecs", -1);
       } else {
-        if (packet[4] & 0x40 == 0) val >>= 4; // packet[4] bit 6: strong == 0, light == 1
+        if ((packet[4] & 0x40) == 0) val >>= 4; // packet[4] bit 6: strong == 0, light == 1
         print_value("rainsecs", val);
       }
       break;
