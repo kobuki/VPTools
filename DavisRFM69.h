@@ -21,7 +21,22 @@
 
 #define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
 #define SPI_CS               SS // SS is the SPI slave select pin, for instance D10 on atmega328
-#define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)
+//#define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)
+// INT0 on AVRs should be connected to RFM69's DIO0 (ex on ATmega328 it's D2, on ATmega644/1284 it's D2)
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__) || defined(__AVR_ATmega88) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega88__)
+  #define RF69_IRQ_PIN          2
+  #define RF69_IRQ_NUM          0
+#elif defined(__AVR_ATmega644P__) || defined(__AVR_ATmega1284P__)
+  #define RF69_IRQ_PIN          2
+  #define RF69_IRQ_NUM          2
+#elif defined(__AVR_ATmega32U4__)
+  #define RF69_IRQ_PIN          3
+  #define RF69_IRQ_NUM          0
+#else 
+  #define RF69_IRQ_PIN          2
+  #define RF69_IRQ_NUM          0  
+#endif
+
 #define CSMA_LIMIT          -90 // upper RX signal sensitivity threshold in dBm for carrier sense access
 #define RF69_MODE_SLEEP       0 // XTAL OFF
 #define RF69_MODE_STANDBY     1 // XTAL ON
@@ -87,9 +102,10 @@ class DavisRFM69 {
 	static PacketFifo fifo;
 	static Station *stations;
 
-    DavisRFM69(byte slaveSelectPin=SPI_CS, byte interruptPin=RF69_IRQ_PIN, bool isRFM69HW=false) {
+    DavisRFM69(byte slaveSelectPin=SPI_CS, byte interruptPin=RF69_IRQ_PIN, bool isRFM69HW=false, byte interruptNum=RF69_IRQ_NUM) {
       _slaveSelectPin = slaveSelectPin;
       _interruptPin = interruptPin;
+      _interruptNum = interruptNum;
       _mode = RF69_MODE_STANDBY;
       _packetReceived = false;
       _powerLevel = 31;
@@ -147,6 +163,7 @@ class DavisRFM69 {
     static DavisRFM69* selfPointer;
     byte _slaveSelectPin;
     byte _interruptPin;
+    byte _interruptNum;
     byte _powerLevel;
     bool _isRFM69HW;
 

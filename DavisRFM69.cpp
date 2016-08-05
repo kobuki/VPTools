@@ -97,6 +97,7 @@ void DavisRFM69::initialize(byte freqBand)
     {255, 0}
   };
 
+  digitalWrite(_slaveSelectPin, HIGH);
   pinMode(_slaveSelectPin, OUTPUT);
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(MSBFIRST);
@@ -112,7 +113,7 @@ void DavisRFM69::initialize(byte freqBand)
   setHighPower(_isRFM69HW); //called regardless if it's a RFM69W or RFM69HW
   setMode(RF69_MODE_STANDBY);
   while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // Wait for ModeReady
-  attachInterrupt(0, DavisRFM69::isr0, RISING);
+  attachInterrupt(_interruptNum, DavisRFM69::isr0, RISING);
 
   selfPointer = this;
   userInterrupt = NULL;
