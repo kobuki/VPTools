@@ -67,10 +67,10 @@ void loop() {
 }
 
 void startReceiver() {
+  radio.initialize(cfgBand);
   radio.setStations(stations, cfgNumStations);
   radio.setRssiThresholdRaw(cfgRfSensitivity);
   radio.setBandwidth(RF69_DAVIS_BW_NARROW);
-  radio.initialize(cfgBand);
   running = true;
 }
 
