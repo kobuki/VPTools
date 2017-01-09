@@ -1,5 +1,5 @@
 
-#include "packetfifo.h"
+#include "PacketFifo.h"
 
 bool PacketFifo::queue(byte* packet, byte channel, byte rssi, int16_t fei, uint32_t delta) {
   if (qLen < FIFO_SIZE) {
