@@ -83,12 +83,14 @@ void setup() {
 
 #endif // SENSOR_TYPE_EMULATED
 
+  blinkLed(LED, 750);
   printBanner();
 }
 
 void loop() {
   if (running) {
     if (radio.fifo.hasElements()) {
+      blinkLed(LED, 25);
       printIPacket(radio.fifo.dequeue());
     }
     printBPacket();
@@ -224,14 +226,6 @@ void wdt_init(void)
   return;
 }
 
-void Blink(byte pin, int blinkDelay)
-{
-  pinMode(pin, OUTPUT);
-  digitalWrite(pin, HIGH);
-  delay(blinkDelay);
-  digitalWrite(pin, LOW);
-}
-
 uint32_t t = 0, lastBaro = 0, lastReceived = 0, lastMissed = 0;
 
 // B 25470 311109 309 99544 46 7
@@ -240,6 +234,7 @@ void printBPacket() {
 
   if (t - lastBaro > BARO_DELAY) {
 
+    blinkLed(LED, 250);
     lastBaro = t;
 
 #ifdef SENSOR_TYPE_EMULATED
@@ -463,5 +458,13 @@ void printFreeRam() {
   int16_t v;
   Serial.print(F("free mem: "));
   Serial.println((int16_t) &v - (__brkval == 0 ? (int16_t) &__heap_start : (int16_t) __brkval));
+}
+
+void blinkLed(byte pin, int blinkDelay)
+{
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
+  delay(blinkDelay);
+  digitalWrite(pin, LOW);
 }
 
