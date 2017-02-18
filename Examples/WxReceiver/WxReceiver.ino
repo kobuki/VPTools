@@ -2,17 +2,24 @@
 
 #include <SPI.h>
 #include <EEPROM.h>
-
-#include <SFE_BMP180.h>
-#include <SI7021.h>
 #include <Wire.h>
-
 #include <avr/wdt.h>
 
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("WxReceiver v2016071301")
+//#define SENSOR_TYPE_EMULATED
+#define SENSOR_TYPE_BME280
+//#define SENSOR_TYPE_SI7021_BMP180
+
+#ifdef SENSOR_TYPE_SI7021_BMP180
+#include <SFE_BMP180.h>
+#include <SI7021.h>
+#else
+#include <SparkFunBME280.h>
+#endif
+
+#define NAME_VERSION F("WxReceiver v2017021801")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -23,11 +30,14 @@
 
 #define SERBUF_LEN 8
 
-//#define EMULATE_INT_SENSORS 1
-
 DavisRFM69 radio;
-SI7021 thSensor;
-SFE_BMP180 pSensor;
+
+#ifdef SENSOR_TYPE_SI7021_BMP180
+SI7021 si7021;
+SFE_BMP180 bmp180;
+#else
+BME280 mySensor;
+#endif
 
 bool localEcho = false;
 bool running = false;
@@ -47,11 +57,31 @@ Station stations[8] = {
 void setup() {
   Serial.begin(SERIAL_BAUD);
 
-#ifndef EMULATE_INT_SENSORS
-  thSensor.begin();
-  thSensor.setHeater(0);
-  pSensor.begin();
-#endif
+#ifndef SENSOR_TYPE_EMULATED
+
+#ifdef SENSOR_TYPE_SI7021_BMP180
+
+  si7021.begin();
+  si7021.setHeater(0);
+  bmp180.begin();
+
+#else // BME280
+
+  mySensor.settings.commInterface = I2C_MODE;
+  mySensor.settings.I2CAddress = 0x76; // can be 0x77
+
+  mySensor.settings.runMode = 3; // normal mode
+  mySensor.settings.tStandby = 7; // 20ms
+  mySensor.settings.filter = 0; // filter off
+  mySensor.settings.tempOverSample = 3; // x4
+  mySensor.settings.pressOverSample = 3; // x4
+  mySensor.settings.humidOverSample = 3; // x4
+  delay(100); // safe sensor init
+  mySensor.begin();
+
+#endif // SENSOR_TYPE_SI7021_BMP180
+
+#endif // SENSOR_TYPE_EMULATED
 
   printBanner();
 }
@@ -209,25 +239,31 @@ void printBPacket() {
   t = micros();
 
   if (t - lastBaro > BARO_DELAY) {
-    lastBaro = t;
-#ifdef EMULATE_INT_SENSORS
-    Serial.print(F("B 0 0 250 10132 "));
-#else
-    int tempC100 = thSensor.getCelsiusHundredths();
-    int humidity = thSensor.getHumidityPercent();
 
+    lastBaro = t;
+
+#ifdef SENSOR_TYPE_EMULATED
+
+    Serial.print(F("B 0 0 250 10132 "));
+
+#else
+
+#ifdef SENSOR_TYPE_SI7021_BMP180
+
+    double P = 0, T = 0;
     char st;
-    double T = 0, P = 0;
+    int tempC100 = si7021.getCelsiusHundredths();
+    int humidity = si7021.getHumidityPercent();
     
-    st = pSensor.startTemperature();
+    st = bmp180.startTemperature();
     if (st != 0) {
       delay(st);
-      st = pSensor.getTemperature(T);
+      st = bmp180.getTemperature(T);
       if (st != 0) {
-        st = pSensor.startPressure(3);
+        st = bmp180.startPressure(3);
         if (st != 0) {
           delay(st);
-          st = pSensor.getPressure(P, T);
+          st = bmp180.getPressure(P, T);
         }
       }
     }
@@ -237,12 +273,29 @@ void printBPacket() {
     Serial.print(' ');
     Serial.print((uint32_t)(P * 100));
     Serial.print(' ');
-#endif
+
+#else // BME280
+
+    double tempC = mySensor.readTempC();
+    int humidity = round(mySensor.readFloatHumidity());
+    double P = mySensor.readFloatPressure();
+
+    Serial.print(F("B 0 0 "));
+    Serial.print(round(tempC * 10.0));
+    Serial.print(' ');
+    Serial.print(round(P));
+    Serial.print(' ');
+
+#endif // SENSOR_TYPE_SI7021_BMP180
+
+#endif // SENSOR_TYPE_EMULATED
+
     Serial.print(radio.packets - lastReceived + radio.lostPackets - lastMissed);
     Serial.print(' ');
     Serial.print(radio.lostPackets - lastMissed);
     Serial.print(' ');
-#ifdef EMULATE_INT_SENSORS
+
+#ifdef SENSOR_TYPE_EMULATED
     Serial.println(45);
 #else
     Serial.println(humidity);
