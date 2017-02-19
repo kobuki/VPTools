@@ -36,7 +36,7 @@ DavisRFM69 radio;
 SI7021 si7021;
 SFE_BMP180 bmp180;
 #else
-BME280 mySensor;
+BME280 bme280;
 #endif
 
 bool localEcho = false;
@@ -67,17 +67,17 @@ void setup() {
 
 #else // BME280
 
-  mySensor.settings.commInterface = I2C_MODE;
-  mySensor.settings.I2CAddress = 0x76; // can be 0x77
+  bme280.settings.commInterface = I2C_MODE;
+  bme280.settings.I2CAddress = 0x76; // can be 0x77
 
-  mySensor.settings.runMode = 3; // normal mode
-  mySensor.settings.tStandby = 7; // 20ms
-  mySensor.settings.filter = 0; // filter off
-  mySensor.settings.tempOverSample = 3; // x4
-  mySensor.settings.pressOverSample = 3; // x4
-  mySensor.settings.humidOverSample = 3; // x4
+  bme280.settings.runMode = 3; // normal mode
+  bme280.settings.tStandby = 7; // 20ms
+  bme280.settings.filter = 0; // filter off
+  bme280.settings.tempOverSample = 3; // x4
+  bme280.settings.pressOverSample = 3; // x4
+  bme280.settings.humidOverSample = 3; // x4
   delay(100); // safe sensor init
-  mySensor.begin();
+  bme280.begin();
 
 #endif // SENSOR_TYPE_SI7021_BMP180
 
@@ -271,9 +271,9 @@ void printBPacket() {
 
 #else // BME280
 
-    double tempC = mySensor.readTempC();
-    int humidity = round(mySensor.readFloatHumidity());
-    double P = mySensor.readFloatPressure();
+    double tempC = bme280.readTempC();
+    int humidity = round(bme280.readFloatHumidity());
+    double P = bme280.readFloatPressure();
 
     Serial.print(F("B 0 0 "));
     Serial.print(round(tempC * 10.0));
