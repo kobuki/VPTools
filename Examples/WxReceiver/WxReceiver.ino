@@ -19,7 +19,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017021801")
+#define NAME_VERSION F("WxReceiver v2017021901")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -71,13 +71,12 @@ void setup() {
   bme280.settings.I2CAddress = 0x76; // can be 0x77
 
   bme280.settings.runMode = 3; // normal mode
-  bme280.settings.tStandby = 7; // 20ms
+  bme280.settings.tStandby = 0; // 0.5ms
   bme280.settings.filter = 0; // filter off
-  bme280.settings.tempOverSample = 3; // x4
-  bme280.settings.pressOverSample = 3; // x4
-  bme280.settings.humidOverSample = 3; // x4
-  delay(100); // safe sensor init
-  bme280.begin();
+  bme280.settings.tempOverSample = 1; // x1
+  bme280.settings.pressOverSample = 1; // x1
+  bme280.settings.humidOverSample = 1; // x1
+  delay(10); // safe sensor init
 
 #endif // SENSOR_TYPE_SI7021_BMP180
 
@@ -271,9 +270,11 @@ void printBPacket() {
 
 #else // BME280
 
+    bme280.begin();
     double tempC = bme280.readTempC();
     int humidity = round(bme280.readFloatHumidity());
     double P = bme280.readFloatPressure();
+    bme280.writeRegister(BME280_CTRL_MEAS_REG, 0x00); 
 
     Serial.print(F("B 0 0 "));
     Serial.print(round(tempC * 10.0));
