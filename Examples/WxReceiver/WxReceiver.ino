@@ -19,7 +19,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017021901")
+#define NAME_VERSION F("WxReceiver v2017042101")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -77,6 +77,8 @@ void setup() {
   bme280.settings.pressOverSample = 1; // x1
   bme280.settings.humidOverSample = 1; // x1
   delay(10); // safe sensor init
+  bme280.begin();
+  bme280.readFloatPressure(); // throw away first read
 
 #endif // SENSOR_TYPE_SI7021_BMP180
 
