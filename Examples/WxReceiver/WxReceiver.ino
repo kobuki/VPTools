@@ -8,9 +8,10 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
+// Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_EMULATED
-#define SENSOR_TYPE_BMP280
-//#define SENSOR_TYPE_BME280
+//#define SENSOR_TYPE_BMP280
+#define SENSOR_TYPE_BME280
 //#define SENSOR_TYPE_SI7021_BMP180
 
 #ifdef SENSOR_TYPE_SI7021_BMP180
