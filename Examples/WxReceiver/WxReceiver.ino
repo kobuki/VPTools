@@ -9,8 +9,8 @@
 #include "PacketFifo.h"
 
 //#define SENSOR_TYPE_EMULATED
-//#define SENSOR_TYPE_BMP280
-#define SENSOR_TYPE_BME280
+#define SENSOR_TYPE_BMP280
+//#define SENSOR_TYPE_BME280
 //#define SENSOR_TYPE_SI7021_BMP180
 
 #ifdef SENSOR_TYPE_SI7021_BMP180
@@ -27,7 +27,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017042101")
+#define NAME_VERSION F("WxReceiver v2017052401")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
