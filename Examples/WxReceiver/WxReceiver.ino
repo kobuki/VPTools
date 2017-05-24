@@ -322,8 +322,10 @@ void printBPacket() {
 #else
 #ifndef SENSOR_TYPE_BMP280
     Serial.println(humidity);
-#endif
-#endif
+#else
+    Serial.println();
+#endif // SENSOR_TYPE_BMP280
+#endif // SENSOR_TYPE_EMULATED
 
     lastReceived = radio.packets;
     lastMissed = radio.lostPackets;
