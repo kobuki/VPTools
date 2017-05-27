@@ -32,7 +32,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017052401")
+#define NAME_VERSION F("WxReceiver v2017052701")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
