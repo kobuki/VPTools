@@ -8,18 +8,22 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-// Uncomment ONLY ONE of the following chip support lines
+// Enable sensor emulation for testing drivers - select ONLY this and nothing else
 //#define SENSOR_TYPE_EMULATED
-#define SENSOR_TYPE_SI7021_BMP180
+
+// Enable separate T/H chip (Si7021 or HTU21D)
+//#define SENSOR_TYPE_SI7021
+
+// Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_BMP180
 //#define SENSOR_TYPE_BMP280
-//#define SENSOR_TYPE_BME280
+#define SENSOR_TYPE_BME280
 
-#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
+#ifdef SENSOR_TYPE_BMP180
 #include <SFE_BMP180.h>
 #endif
 
-#ifdef SENSOR_TYPE_SI7021_BMP180
+#ifdef SENSOR_TYPE_SI7021
 #include <SI7021.h>
 #endif
 
@@ -32,7 +36,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017052701")
+#define NAME_VERSION F("WxReceiver v2017052801")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -45,11 +49,11 @@
 
 DavisRFM69 radio;
 
-#ifdef SENSOR_TYPE_SI7021_BMP180
+#ifdef SENSOR_TYPE_SI7021
 SI7021 si7021;
 #endif
 
-#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
+#ifdef SENSOR_TYPE_BMP180
 SFE_BMP180 bmp180;
 #endif
 
@@ -81,12 +85,12 @@ void setup() {
 
 #ifndef SENSOR_TYPE_EMULATED
 
-#ifdef SENSOR_TYPE_SI7021_BMP180
+#ifdef SENSOR_TYPE_SI7021
   si7021.begin();
   si7021.setHeater(0);
 #endif
 
-#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
+#ifdef SENSOR_TYPE_BMP180
   bmp180.begin();
 #endif
 
@@ -103,11 +107,13 @@ void setup() {
   delay(10); // safe sensor init
   bme280.begin();
   bme280.readFloatPressure(); // throw away first read
+  bme280.readTempC(); // throw away first read
 #endif
 
 #ifdef SENSOR_TYPE_BMP280
   bmp280.begin();
   bmp280.readPressure();
+  bmp280.readTemperature();
 #endif
 
 #endif // SENSOR_TYPE_EMULATED
@@ -257,24 +263,24 @@ void wdt_init(void)
 
 uint32_t t = 0, lastBaro = 0, lastReceived = 0, lastMissed = 0;
 
-// B 25470 311109 309 99544 46 7
+// B X X T(C*10) P(Pa) recv+miss miss [RH%]
 void printBPacket() {
   t = micros();
   int humidity = -1;
+  double P = 0, T = 0, tempC = -100;
 
   if (t - lastBaro > BARO_DELAY) {
 
     blinkLed(LED, 250);
     lastBaro = t;
 
-#ifdef SENSOR_TYPE_EMULATED
-    Serial.print(F("B 0 0 250 10132 "));
+#ifdef SENSOR_TYPE_SI7021
+    tempC = si7021.getCelsiusHundredths() / 100.0;
+    humidity = si7021.getHumidityPercent();
 #endif
 
-#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
-    double P = 0, T = 0;
+#ifdef SENSOR_TYPE_BMP180
     char st;
-
     st = bmp180.startTemperature();
     if (st != 0) {
       delay(st);
@@ -287,61 +293,42 @@ void printBPacket() {
         }
       }
     }
-
-#if defined(SENSOR_TYPE_SI7021_BMP180)
-    int tempC100 = si7021.getCelsiusHundredths();
-    humidity = si7021.getHumidityPercent();
-#else
-    int tempC100 = round(T * 100.0);
-#endif
-
-    Serial.print(F("B 0 0 "));
-    Serial.print(tempC100 / 10);
-    Serial.print(' ');
-    Serial.print((uint32_t)(P * 100));
-    Serial.print(' ');
+    P *= 100; // mbar -> Pa
 #endif
 
 #ifdef SENSOR_TYPE_BMP280
-    bmp280.begin();
-    double tempC = bmp280.readTemperature();
-    double P = bmp280.readPressure() * 100.0;
-
-    Serial.print(F("B 0 0 "));
-    Serial.print(round(tempC * 10.0));
-    Serial.print(' ');
-    Serial.print(round(P));
-    Serial.print(' ');
+    T = bmp280.readTemperature();
+    P = bmp280.readPressure(); // Pa
 #endif
 
 #ifdef SENSOR_TYPE_BME280
-    bme280.begin();
-    double tempC = bme280.readTempC();
+    T = bme280.readTempC();
     humidity = round(bme280.readFloatHumidity());
-    double P = bme280.readFloatPressure();
+    P = bme280.readFloatPressure(); // Pa
     bme280.writeRegister(BME280_CTRL_MEAS_REG, 0x00); 
+#endif
+
+#ifdef SENSOR_TYPE_EMULATED
+    P = 1013.2;
+    tempC = 25.0;
+    humidity = 45;
+#endif
 
     Serial.print(F("B 0 0 "));
-    Serial.print(round(tempC * 10.0));
+    Serial.print(tempC != -100 ? round(tempC * 10.0) : round(T * 10.0));
     Serial.print(' ');
     Serial.print(round(P));
     Serial.print(' ');
-#endif
-
     Serial.print(radio.packets - lastReceived + radio.lostPackets - lastMissed);
     Serial.print(' ');
     Serial.print(radio.lostPackets - lastMissed);
-    Serial.print(' ');
 
-#ifdef SENSOR_TYPE_EMULATED
-    Serial.println(45);
-#else
     if (humidity != -1) {
-        Serial.println(humidity);
+      Serial.print(' ');
+      Serial.println(humidity);
     } else {
-        Serial.println();
+      Serial.println();
     }
-#endif
 
     lastReceived = radio.packets;
     lastMissed = radio.lostPackets;
