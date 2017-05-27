@@ -10,12 +10,16 @@
 
 // Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_EMULATED
+#define SENSOR_TYPE_SI7021_BMP180
+//#define SENSOR_TYPE_BMP180
 //#define SENSOR_TYPE_BMP280
-#define SENSOR_TYPE_BME280
-//#define SENSOR_TYPE_SI7021_BMP180
+//#define SENSOR_TYPE_BME280
+
+#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
+#include <SFE_BMP180.h>
+#endif
 
 #ifdef SENSOR_TYPE_SI7021_BMP180
-#include <SFE_BMP180.h>
 #include <SI7021.h>
 #endif
 
@@ -43,6 +47,9 @@ DavisRFM69 radio;
 
 #ifdef SENSOR_TYPE_SI7021_BMP180
 SI7021 si7021;
+#endif
+
+#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
 SFE_BMP180 bmp180;
 #endif
 
@@ -77,6 +84,9 @@ void setup() {
 #ifdef SENSOR_TYPE_SI7021_BMP180
   si7021.begin();
   si7021.setHeater(0);
+#endif
+
+#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
   bmp180.begin();
 #endif
 
@@ -250,6 +260,7 @@ uint32_t t = 0, lastBaro = 0, lastReceived = 0, lastMissed = 0;
 // B 25470 311109 309 99544 46 7
 void printBPacket() {
   t = micros();
+  int humidity = -1;
 
   if (t - lastBaro > BARO_DELAY) {
 
@@ -260,12 +271,10 @@ void printBPacket() {
     Serial.print(F("B 0 0 250 10132 "));
 #endif
 
-#ifdef SENSOR_TYPE_SI7021_BMP180
+#if defined(SENSOR_TYPE_SI7021_BMP180) || defined(SENSOR_TYPE_BMP180)
     double P = 0, T = 0;
     char st;
-    int tempC100 = si7021.getCelsiusHundredths();
-    int humidity = si7021.getHumidityPercent();
-    
+
     st = bmp180.startTemperature();
     if (st != 0) {
       delay(st);
@@ -278,6 +287,13 @@ void printBPacket() {
         }
       }
     }
+
+#if defined(SENSOR_TYPE_SI7021_BMP180)
+    int tempC100 = si7021.getCelsiusHundredths();
+    humidity = si7021.getHumidityPercent();
+#else
+    int tempC100 = round(T * 100.0);
+#endif
 
     Serial.print(F("B 0 0 "));
     Serial.print(tempC100 / 10);
@@ -301,7 +317,7 @@ void printBPacket() {
 #ifdef SENSOR_TYPE_BME280
     bme280.begin();
     double tempC = bme280.readTempC();
-    int humidity = round(bme280.readFloatHumidity());
+    humidity = round(bme280.readFloatHumidity());
     double P = bme280.readFloatPressure();
     bme280.writeRegister(BME280_CTRL_MEAS_REG, 0x00); 
 
@@ -320,12 +336,12 @@ void printBPacket() {
 #ifdef SENSOR_TYPE_EMULATED
     Serial.println(45);
 #else
-#ifndef SENSOR_TYPE_BMP280
-    Serial.println(humidity);
-#else
-    Serial.println();
-#endif // SENSOR_TYPE_BMP280
-#endif // SENSOR_TYPE_EMULATED
+    if (humidity != -1) {
+        Serial.println(humidity);
+    } else {
+        Serial.println();
+    }
+#endif
 
     lastReceived = radio.packets;
     lastMissed = radio.lostPackets;
