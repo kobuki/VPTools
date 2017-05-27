@@ -309,7 +309,7 @@ void printBPacket() {
 #endif
 
 #ifdef SENSOR_TYPE_EMULATED
-    P = 1013.2;
+    P = 101320.0;
     tempC = 25.0;
     humidity = 45;
 #endif
