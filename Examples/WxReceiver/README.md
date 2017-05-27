@@ -8,7 +8,8 @@ It emulates a subset of the publicly documented commands for the stick. It only 
 The sketch requires either a LowPowerLab Weathershield (when used on a Moteino) or any similar Arduino-compatible device equipped with:
 * a Hope RF RFM69 series 868/915 MHz transceiver for the proper band for the country
 * a SiLabs Si7021 T/H sensor combined with a Bosch Sensortec BMP180 barometric pressure sensor (WeatherShield)
-* a Bosch Sensortec BME280 T/H/P sensor (or WeatherShield R2)
-* a Bosch Sensortec BMP280 P/T sensor
+* a BME280 T/H/P sensor (or WeatherShield R2)
+* a BMP280 P/T sensor
+* a BMP180 P/T sensor
 
 Or it can be easily adapted for any suitable sensor. They're optional, and can be emulated or code simply removed if observing internal climate conditions is not needed.
