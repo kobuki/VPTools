@@ -16,8 +16,12 @@
 
 // Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_BMP180
-//#define SENSOR_TYPE_BMP280
-#define SENSOR_TYPE_BME280
+#define SENSOR_TYPE_BMP280
+//#define SENSOR_TYPE_BME280
+
+// change this according to your setup/devboard
+#define I2C_BME280 0x76
+#define I2C_BMP280 0x76
 
 #ifdef SENSOR_TYPE_BMP180
 #include <SFE_BMP180.h>
@@ -36,7 +40,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017052801")
+#define NAME_VERSION F("WxReceiver v2017052802")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -96,7 +100,7 @@ void setup() {
 
 #ifdef SENSOR_TYPE_BME280
   bme280.settings.commInterface = I2C_MODE;
-  bme280.settings.I2CAddress = 0x76; // can be 0x77
+  bme280.settings.I2CAddress = I2C_BME280; // can be 0x77
 
   bme280.settings.runMode = 3; // normal mode
   bme280.settings.tStandby = 0; // 0.5ms
@@ -111,7 +115,7 @@ void setup() {
 #endif
 
 #ifdef SENSOR_TYPE_BMP280
-  bmp280.begin();
+  bmp280.begin(I2C_BMP280);
   bmp280.readPressure();
   bmp280.readTemperature();
 #endif
