@@ -40,7 +40,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017052802")
+#define NAME_VERSION F("WxReceiver v2017061401")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -87,8 +87,6 @@ Station stations[8] = {
 void setup() {
   Serial.begin(SERIAL_BAUD);
 
-#ifndef SENSOR_TYPE_EMULATED
-
 #ifdef SENSOR_TYPE_SI7021
   si7021.begin();
   si7021.setHeater(0);
@@ -120,8 +118,7 @@ void setup() {
   bmp280.readTemperature();
 #endif
 
-#endif // SENSOR_TYPE_EMULATED
-
+  delay(500);
   blinkLed(LED, 750);
   printBanner();
 }
@@ -189,6 +186,11 @@ void processSerial()
     c = Serial.read();
 
     if (c == '\r' || c == '\n') {
+
+      // skip consecutive line end chars
+      delay(5);
+      c = Serial.peek();
+      if (c == '\r' || c == '\n') return;
 
       // ack empty command with OK
       if (i == 0) {

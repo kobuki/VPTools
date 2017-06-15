@@ -64,7 +64,7 @@ void DavisRFM69::initialize(byte freqBand)
     ///* 0x13 */ { REG_OCP, RF_OCP_ON | RF_OCP_TRIM_95 }, //over current protection (default is 95mA)
     /* 0x18 */ { REG_LNA, RF_LNA_ZIN_50 | RF_LNA_GAINSELECT_AUTO }, // Not sure which is correct!
     // REG_RXBW 50 kHz fixes console retransmit reception but seems worse for SIM transmitters (to be confirmed with more testing)
-	// Defaulting to narrow BW, since console retransmits are rarely used - use setBandwidth() to change this
+    // Defaulting to narrow BW, since console retransmits are rarely used - use setBandwidth() to change this
     /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
     /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use double the bandwidth during AFC as reception
     /* 0x1B - 0x1D These registers are for OOK.  Not used */
@@ -105,7 +105,7 @@ void DavisRFM69::initialize(byte freqBand)
   SPI.begin();
 
   do writeReg(REG_SYNCVALUE1, 0xaa); while (readReg(REG_SYNCVALUE1) != 0xaa);
-        do writeReg(REG_SYNCVALUE1, 0x55); while (readReg(REG_SYNCVALUE1) != 0x55);
+  do writeReg(REG_SYNCVALUE1, 0x55); while (readReg(REG_SYNCVALUE1) != 0x55);
 
   for (byte i = 0; CONFIG[i][0] != 255; i++)
     writeReg(CONFIG[i][0], CONFIG[i][1]);
@@ -146,10 +146,10 @@ void DavisRFM69::handleTimerInt() {
   bool readjust = false;
 
   if (stations[curStation].interval > 0
-	  && stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
+      && stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
       && CHANNEL != stations[curStation].channel) {
     selfPointer->setChannel(stations[curStation].channel);
-	return;
+    return;
   }
 
   if (lastRx - lastDiscStep > DISCOVERY_STEP) {
@@ -204,7 +204,7 @@ void DavisRFM69::handleRadioInt() {
   // repeater packets checksum bytes (0..5) and (8..9), so try this at mismatch
   if (calcCrc != rxCrc) {
     calcCrc = DavisRFM69::crc16_ccitt(DATA + 8, 2, calcCrc);
-	repeaterCrcTried = true;
+    repeaterCrcTried = true;
   }
 
   delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
@@ -220,8 +220,8 @@ void DavisRFM69::handleRadioInt() {
     int stIx = findStation(id);
 
     // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
-	// OR packet passed the repeater crc check, but no repeater is set for the station
-	// OR packet passed the normal crc check, and repeater is set for the station
+    // OR packet passed the repeater crc check, but no repeater is set for the station
+    // OR packet passed the normal crc check, and repeater is set for the station
     if (stIx < 0
         || (repeaterCrcTried && stations[stIx].repeaterId == 0)
         || (!repeaterCrcTried && stations[stIx].repeaterId != 0)) {
@@ -237,7 +237,7 @@ void DavisRFM69::handleRadioInt() {
 
     if (stations[stIx].active) {
       packets++;
-	  stations[stIx].packets++;
+      stations[stIx].packets++;
       fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, stations[curStation].lastSeen > 0 ? lastRx - stations[curStation].lastSeen : 0);
     }
 
@@ -613,13 +613,13 @@ void DavisRFM69::setBandwidth(byte bw)
 {
   switch (bw) {
     case RF69_DAVIS_BW_NARROW:
-	  writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4); // Use 25 kHz BW (BitRate < 2 * RxBw)
-	  writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use double the bandwidth during AFC as reception
+      writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4); // Use 25 kHz BW (BitRate < 2 * RxBw)
+      writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use double the bandwidth during AFC as reception
       break;
     case RF69_DAVIS_BW_WIDE:
       // REG_RXBW 50 kHz fixes console retransmit reception but seems worse for SIM transmitters (to be confirmed with more testing)
-	  writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use 50 kHz BW (BitRate < 2 * RxBw)
-	  writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_2); // Use double the bandwidth during AFC as reception
+      writeReg(REG_RXBW,  RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3); // Use 50 kHz BW (BitRate < 2 * RxBw)
+      writeReg(REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_2); // Use double the bandwidth during AFC as reception
       break;
     default:
       return;

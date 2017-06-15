@@ -32,9 +32,9 @@
 #elif defined(__AVR_ATmega32U4__)
   #define RF69_IRQ_PIN          3
   #define RF69_IRQ_NUM          0
-#else 
+#else
   #define RF69_IRQ_PIN          2
-  #define RF69_IRQ_NUM          0  
+  #define RF69_IRQ_NUM          0
 #endif
 
 #define CSMA_LIMIT          -90 // upper RX signal sensitivity threshold in dBm for carrier sense access
@@ -49,7 +49,7 @@
 
 #define null                  0
 #define COURSE_TEMP_COEF    -90 // puts the temperature reading in the ballpark, user can fine tune the returned value
-#define RF69_FSTEP 61.03515625 	// == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
+#define RF69_FSTEP 61.03515625  // == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
 
 #define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before rediscovery
 #define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
@@ -62,19 +62,19 @@
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
-  byte id;                	// station ID (set with the DIP switch on original equipment)
-                          	// set it ONE LESS than advertised station id, eg. 0 for station 1 (default) etc.
-  byte type;              	// STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
-  bool active;            	// true when the station is actively listened to but ignored
-  byte repeaterId;        	// repeater id when packet is coming via a repeater, otherwise 0
-                          	// repeater IDs A..H are stored as 0x8..0xf here
-  byte channel;           	// rx channel the next packet of the station is expected on
-  uint32_t lastRx;   	 	// last time a packet is seen or should have been seen when missed
-  uint32_t lastSeen; 	 	// last factual reception time
-  uint32_t interval;    	// packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
-  uint32_t numResyncs;  	// number of times discovery of this station started because of packet loss
-  uint32_t packets; 		// total number of received packets after (re)restart
-  uint32_t missedPackets;	// total number of misssed packets after (re)restart
+  byte id;                  // station ID (set with the DIP switch on original equipment)
+                            // set it ONE LESS than advertised station id, eg. 0 for station 1 (default) etc.
+  byte type;                // STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
+  bool active;              // true when the station is actively listened to but ignored
+  byte repeaterId;          // repeater id when packet is coming via a repeater, otherwise 0
+                            // repeater IDs A..H are stored as 0x8..0xf here
+  byte channel;             // rx channel the next packet of the station is expected on
+  uint32_t lastRx;      // last time a packet is seen or should have been seen when missed
+  uint32_t lastSeen;    // last factual reception time
+  uint32_t interval;      // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
+  uint32_t numResyncs;    // number of times discovery of this station started because of packet loss
+  uint32_t packets;     // total number of received packets after (re)restart
+  uint32_t missedPackets; // total number of misssed packets after (re)restart
   byte lostPackets;         // missed packets since a packet was last seen from this station
 };
 
@@ -86,21 +86,21 @@ class DavisRFM69 {
     static volatile byte CHANNEL;
     static volatile int RSSI;
     static volatile int16_t FEI;
-	static volatile byte band;
+    static volatile byte band;
 
-	static volatile uint32_t packets;
-	static volatile uint32_t lostPackets;
-	static volatile uint32_t numResyncs;
-	static volatile uint32_t lostStations;
-	static volatile byte stationsFound;
-	static volatile byte curStation;
-	static volatile byte numStations;
+    static volatile uint32_t packets;
+    static volatile uint32_t lostPackets;
+    static volatile uint32_t numResyncs;
+    static volatile uint32_t lostStations;
+    static volatile byte stationsFound;
+    static volatile byte curStation;
+    static volatile byte numStations;
     static volatile byte hopIndex;
     static volatile byte discChannel;
-	static volatile uint32_t lastDiscStep;
+    static volatile uint32_t lastDiscStep;
 
-	static PacketFifo fifo;
-	static Station *stations;
+    static PacketFifo fifo;
+    static Station *stations;
 
     DavisRFM69(byte slaveSelectPin=SPI_CS, byte interruptPin=RF69_IRQ_PIN, bool isRFM69HW=false, byte interruptNum=RF69_IRQ_NUM) {
       _slaveSelectPin = slaveSelectPin;
@@ -134,21 +134,21 @@ class DavisRFM69 {
     void writeReg(byte addr, byte val);
     void readAllRegs();
     void setTxMode(bool txMode);
-	void setBand(byte newBand);
-	void setBandwidth(byte bw);
-	byte getBandTabLength();
+    void setBand(byte newBand);
+    void setBandwidth(byte bw);
+    byte getBandTabLength();
 
-	byte nextChannel(byte channel);
-	int findStation(byte id);
-	void handleRadioInt();
-	void initStations();
-	void nextStation();
+    byte nextChannel(byte channel);
+    int findStation(byte id);
+    void handleRadioInt();
+    void initStations();
+    void nextStation();
 
-	static void handleTimerInt();
-	static void setStations(Station *_stations, byte n);
-	void stopReceiver();
-	void setRssiThreshold(int rssiThreshold);
-	void setRssiThresholdRaw(int rssiThresholdRaw);
+    static void handleTimerInt();
+    static void setStations(Station *_stations, byte n);
+    void stopReceiver();
+    void setRssiThreshold(int rssiThreshold);
+    void setRssiThresholdRaw(int rssiThresholdRaw);
 
   protected:
     static volatile bool txMode;

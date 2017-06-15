@@ -8,7 +8,7 @@
  *  - Add (long) assignments and casts to TimerOne::read() to ensure calculations involving tmp, ICR1 and TCNT1 aren't truncated
  *  - Ensure 16 bit registers accesses are atomic - run with interrupts disabled when accessing
  *  - Remove global enable of interrupts (sei())- could be running within an interrupt routine)
- *  - Disable interrupts whilst TCTN1 == 0.  Datasheet vague on this, but experiment shows that overflow interrupt 
+ *  - Disable interrupts whilst TCTN1 == 0.  Datasheet vague on this, but experiment shows that overflow interrupt
  *    flag gets set whilst TCNT1 == 0, resulting in a phantom interrupt.  Could just set to 1, but gets inaccurate
  *    at very short durations
  *  - startBottom() added to start counter at 0 and handle all interrupt enabling.
@@ -19,17 +19,17 @@
  *  - renamed startBottom() to start(). This breaks some old code that expects start to continue counting where it left off
  *
  *  This program is free software: you can redistribute it and/or modify
- *	it under the terms of the GNU General Public License as published by
- *	the Free Software Foundation, either version 3 of the License, or
- *	(at your option) any later version.
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
  *
- *	This program is distributed in the hope that it will be useful,
- *	but WITHOUT ANY WARRANTY; without even the implied warranty of
- *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *	GNU General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- *	You should have received a copy of the GNU General Public License
- *	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  *  See Google Code project http://code.google.com/p/arduino-timerone/ for latest
  */
@@ -44,19 +44,19 @@
 class TimerOne
 {
   public:
-  
+
     // properties
     unsigned int pwmPeriod;
     unsigned char clockSelectBits;
-	char oldSREG;					// To hold Status Register while ints disabled
+  char oldSREG;         // To hold Status Register while ints disabled
 
     // methods
     void initialize(long microseconds=1000000);
     void start();
     void stop();
     void restart();
-	void resume();
-	unsigned long read();
+  void resume();
+  unsigned long read();
     void pwm(char pin, int duty, long microseconds=-1);
     void disablePwm(char pin);
     void attachInterrupt(void (*isr)(), long microseconds=-1);
