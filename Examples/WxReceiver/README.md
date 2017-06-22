@@ -5,9 +5,9 @@ This sketch is a receiver compatible with the WeeWx driver written by Matthew Wa
 
 It emulates a subset of the publicly documented commands for the stick. It only supports 8 and 10-byte raw output, which the WeeWx driver currently uses as its main and only fully developed modus operandi. Thus it's not really meant as a replacement, but a cheap alternative to other available Davis Vantage device receivers for anyone wishing to use WeeWx.
 
-The sketch can use either a LowPowerLab Weathershield (when used on a Moteino) or any similar Arduino-compatible device equipped with a Hope RF RFM69 series 868/915 MHz transceiver for the proper band for the country
+The sketch can use either a LowPowerLab Weathershield (when used on a Moteino) or any similar Arduino-compatible device equipped with a Hope RF RFM69 series 868/915 MHz transceiver for the proper band for the country.
 
-Dupported sensors:
+Supported sensors:
 * SiLabs Si7021 T/H sensor
 * BME280 T/H/P sensor (or WeatherShield R2), BMP280 P/T sensor, BMP180 P/T sensor
 
