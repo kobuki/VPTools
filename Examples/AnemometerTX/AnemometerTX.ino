@@ -308,12 +308,6 @@ int interpolate(float mph, int angle) {
 
 // Send out radio packet containing the wind data and the transmitter ID.
 // Every packet contains dummy data on other sensors in the proper transmit sequence.
-// Unconnected raw sensor data on an ISS:
-// temp:  80-00-00-ff-c5-00
-// rh:    a0-00-00-00-05-00
-// solar: 60-00-00-ff-c5-00
-// uv:    40-00-00-ff-c5-00
-// for an unconnected wind sensor wind speed and direction are both 0
 void sendRadioPacket() {
   packet[0] = txseq_vp2[seqIndex] | TX_ID;
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
