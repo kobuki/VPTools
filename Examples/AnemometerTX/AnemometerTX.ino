@@ -74,10 +74,10 @@ static const float windtab[27][3] =
 // Observed sequence of transmitted ISS value types.
 // The upper nibble is important, the lower nibble is the transmitter ID + battery flag.
 // Type values for a standard VP2 ISS:
-//   0x80 0xe0 0x40 0xa0 0x60 0x50 0x90
-//   temp rain uv   rh   sol  unk  unk
+//   0x80  0xe0  0x40  0xa0  0x60  0x50  0x90    0xc0
+//   temp  rain  uv    rh    sol   rsecs gust    unknown (seen on ATK and T/H stations)
 // Wind speed and direction is transmitted in every packet at byte offsets 1 and 2.
-static const byte txseq[20] = 
+static const byte txseq_vp2[20] = 
 {
   0x80, 0xe0, 0x50, 0x40,
   0x80, 0xe0, 0x50, 0x90,
@@ -85,6 +85,28 @@ static const byte txseq[20] =
   0x80, 0xe0, 0x50, 0xa0,
   0x80, 0xe0, 0x50, 0x60
 };
+
+// Type values for a standard Vue ISS:
+//   0x80  0xe0  0x20  0xa0  0x70  0x50  0x90    0x30
+//   temp  rain  scap  rh    pvv   rsecs gust    unknown
+static const byte txseq_vue[20] =
+{
+  0x80, 0x50, 0xE0, 0x20,
+  0x80, 0x50, 0xE0, 0x70,
+  0x80, 0x50, 0xE0, 0x30,
+  0x80, 0x50, 0xE0, 0x90,
+  0x80, 0x50, 0xE0, 0xA0
+};
+
+// "No sensor" packets for VP2:
+// wind:     packet[1:2] (ww, dd) is 0 for all packet types
+// temp:     80 ww dd FF C1 00
+// rh:       A0 ww dd 00 01 00
+// rain:     E0 ww dd 80 01 00
+// rainrate: 50 ww dd FF 71 00
+// UV:       40 ww dd FF C5 00
+// solar:    60 ww dd FF C5 00
+// gust:     90 ww dd 00 05 00
 
 // ----- Global Types and Variable Declarations -----
 
@@ -107,7 +129,7 @@ ecpoint im[2][2]; // 2 row x 2 col ec points as interpolation matrix
 
 DavisRFM69 radio;
 unsigned long lastTx;  // last time a wind data radio transmission started
-byte seqIndex;         // current packet type index in txseq
+byte seqIndex;         // current packet type index in txseq_vp2
 char hs[24];
 char* hex = "0123456789abcdef";
 
@@ -181,7 +203,7 @@ void loop() {
   Serial.print(pulseCount);
   Serial.print("\tperiod: ");
   Serial.print(period);
-  Serial.print("\ttxseq: ");
+  Serial.print("\ttxseq_vp2: ");
   Serial.print(oldsi);
   Serial.print("\tchan: ");
   Serial.print(oldchan);
@@ -292,8 +314,8 @@ int interpolate(float mph, int angle) {
 // uv:    40-00-00-ff-c5-00
 // for an unconnected wind sensor wind speed and direction are both 0
 void sendRadioPacket() {
-  radio.DATA[0] = txseq[seqIndex] | TX_ID;
-  if (++seqIndex >= sizeof(txseq)) seqIndex = 0;
+  radio.DATA[0] = txseq_vp2[seqIndex] | TX_ID;
+  if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
   radio.DATA[1] = windSpeed;
   radio.DATA[2] = vaneAngleRaw;
   radio.DATA[3] = radio.DATA[4] = radio.DATA[5] = 0;

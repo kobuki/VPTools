@@ -98,6 +98,7 @@ class DavisRFM69 {
     static volatile byte hopIndex;
     static volatile byte discChannel;
     static volatile uint32_t lastDiscStep;
+    static volatile int16_t freqCorr;
 
     static PacketFifo fifo;
     static Station *stations;
@@ -149,6 +150,7 @@ class DavisRFM69 {
     void stopReceiver();
     void setRssiThreshold(int rssiThreshold);
     void setRssiThresholdRaw(int rssiThresholdRaw);
+    void setFreqCorr(int16_t value);
 
   protected:
     static volatile bool txMode;
@@ -410,11 +412,15 @@ static const uint8_t bandTabLengths[4] = {
 #define VP2P_TEMP         0x8 // outside temperature
 #define VP2P_WINDGUST     0x9 // 10-minute wind gust
 #define VP2P_HUMIDITY     0xA // outside humidity
+#define VP2P_UNKNOWN1     0xC // unknown packet type:
+                              //   packet[3] and pkt[5] are always zero;
+                              //   packet[4] has values 0-3 (ATK) or 5 (temp/hum)
 #define VP2P_RAIN         0xE // rain bucket tips counter
 #define VP2P_SOIL_LEAF    0xF // soil/leaf station
 
 // Vue packet types
 #define VUEP_VCAP         0x2 // supercap voltage
+#define VUEP_UNKNOWN1     0x3 // unknown Vue packet type
 #define VUEP_VSOLAR       0x7 // solar panel voltage
 
 #endif  // DAVISRFM_h

@@ -37,6 +37,7 @@ volatile byte DavisRFM69::curStation = 0;
 volatile byte DavisRFM69::numStations = 0;
 volatile byte DavisRFM69::discChannel = 0;
 volatile uint32_t DavisRFM69::lastDiscStep;
+volatile int16_t DavisRFM69::freqCorr = 0;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
@@ -48,10 +49,10 @@ void DavisRFM69::initialize(byte freqBand)
   {
     /* 0x01 */ { REG_OPMODE, RF_OPMODE_SEQUENCER_ON | RF_OPMODE_LISTEN_OFF | RF_OPMODE_STANDBY },
     /* 0x02 */ { REG_DATAMODUL, RF_DATAMODUL_DATAMODE_PACKET | RF_DATAMODUL_MODULATIONTYPE_FSK | RF_DATAMODUL_MODULATIONSHAPING_10 }, // Davis uses Gaussian shaping with BT=0.5
-    /* 0x03 */ { REG_BITRATEMSB, RF_BITRATEMSB_19200}, // Davis uses a datarate of 19.2 KBPS
-    /* 0x04 */ { REG_BITRATELSB, RF_BITRATELSB_19200},
-    /* 0x05 */ { REG_FDEVMSB, RF_FDEVMSB_9900}, // Davis uses a deviation of 9.9 kHz
-    /* 0x06 */ { REG_FDEVLSB, RF_FDEVLSB_9900},
+    /* 0x03 */ { REG_BITRATEMSB, RF_BITRATEMSB_19200 }, // (0x06) Davis uses a datarate of 19.2 KBPS
+    /* 0x04 */ { REG_BITRATELSB, RF_BITRATELSB_19200 }, // (0x83) 0x93 = -1%, 0xA5 = -2%
+    /* 0x05 */ { REG_FDEVMSB, RF_FDEVMSB_9900 }, // (0x00) Davis uses a deviation of 9.9 kHz
+    /* 0x06 */ { REG_FDEVLSB, 0xA4 }, // RF_FDEVLSB_9900 },  // (0xa1) 0xA4 = 10000
     /* 0x07 to 0x09 are REG_FRFMSB to LSB. No sense setting them here. Done in main routine.
     /* 0x0B */ { REG_AFCCTRL, RF_AFCLOWBETA_OFF }, // TODO: Should use LOWBETA_ON, but having trouble getting it working
     /* 0x12 */ { REG_PARAMP, RF_PARAMP_25 }, // xxx
@@ -141,6 +142,7 @@ void DavisRFM69::setStations(Station *_stations, byte n) {
 
 // Handle missed packets. Called from Timer1 ISR every ms
 void DavisRFM69::handleTimerInt() {
+  if (txMode) return;
 
   uint32_t lastRx = micros();
   bool readjust = false;
@@ -194,6 +196,7 @@ void DavisRFM69::handleTimerInt() {
 
 // Handle received packets, called from RFM69 ISR
 void DavisRFM69::handleRadioInt() {
+  if (txMode) return;
 
   uint32_t lastRx = micros();
   uint16_t rxCrc = word(DATA[6], DATA[7]);  // received CRC
@@ -338,7 +341,7 @@ void DavisRFM69::send(const void* buffer)
 // IMPORTANT: make sure buffer is at least 6 bytes
 void DavisRFM69::sendFrame(const void* buffer)
 {
-  setMode(RF69_MODE_STANDBY); //turn off receiver to prevent reception while filling fifo
+  setMode(RF69_MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
   while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // Wait for ModeReady
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00); // DIO0 is "Packet Sent"
 
@@ -361,6 +364,8 @@ void DavisRFM69::sendFrame(const void* buffer)
   SPI.transfer(0xaa);
   SPI.transfer(0xaa);
   SPI.transfer(0xaa);
+  SPI.transfer(0xaa);
+  SPI.transfer(0xaa);
 
   // sync word
   SPI.transfer(0xcb);
@@ -377,6 +382,7 @@ void DavisRFM69::sendFrame(const void* buffer)
   // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeaters)
   SPI.transfer(0xff);
   SPI.transfer(0xff);
+  SPI.transfer(0xff);
 
   unselect();
 
@@ -389,16 +395,28 @@ void DavisRFM69::sendFrame(const void* buffer)
 void DavisRFM69::setChannel(byte channel)
 {
   CHANNEL = channel;
-  if (CHANNEL > bandTabLengths[band] - 1) CHANNEL = 0;
-  writeReg(REG_FRFMSB, pgm_read_byte(&bandTab[band][CHANNEL][0]));
-  writeReg(REG_FRFMID, pgm_read_byte(&bandTab[band][CHANNEL][1]));
-  writeReg(REG_FRFLSB, pgm_read_byte(&bandTab[band][CHANNEL][2]));
+
+  byte a = pgm_read_byte(&bandTab[band][CHANNEL][0]);
+  byte b = pgm_read_byte(&bandTab[band][CHANNEL][1]);
+  byte c = pgm_read_byte(&bandTab[band][CHANNEL][2]);
+
+  if (freqCorr != 0) {
+    uint32_t x = ((uint32_t)a<<16) | ((uint32_t)b<<8) | (uint32_t)c;
+    x += freqCorr;
+    c =  x & 0x0000ff;
+    b = (x & 0x00ff00) >> 8;
+    a = (x & 0xff0000) >> 16;
+  }
+
+  writeReg(REG_FRFMSB, a);
+  writeReg(REG_FRFMID, b);
+  writeReg(REG_FRFLSB, c);
   if (!txMode) receiveBegin();
 }
 
 void DavisRFM69::hop()
 {
-  setChannel(++CHANNEL);
+  setChannel(nextChannel(CHANNEL));
 }
 
 // The data bytes come over the air from the ISS least significant bit first. Fix them as we go. From
@@ -591,16 +609,18 @@ void DavisRFM69::setTxMode(bool txMode)
 {
   DavisRFM69::txMode = txMode;
   if (txMode) {
+    Timer1.stop();
     writeReg(REG_PREAMBLELSB, 0);
     writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
-    // +10 = 4 bytes "carrier" (0xff) + 4 bytes preamble (0xaa) + 2 bytes sync
-    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 10);
-    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 10 - 1));
+    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes sync
+    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
+    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
   } else {
     writeReg(REG_PREAMBLELSB, 4);
     writeReg(REG_SYNCCONFIG, RF_SYNC_ON | RF_SYNC_FIFOFILL_AUTO | RF_SYNC_SIZE_2 | RF_SYNC_TOL_2);
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
     writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN - 1));
+    Timer1.resume();
   }
 }
 
@@ -629,4 +649,9 @@ void DavisRFM69::setBandwidth(byte bw)
 byte DavisRFM69::getBandTabLength()
 {
   return bandTabLengths[band];
+}
+
+void DavisRFM69::setFreqCorr(int value)
+{
+  freqCorr = value * 1000.0 / RF69_FSTEP;
 }

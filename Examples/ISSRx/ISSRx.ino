@@ -179,6 +179,11 @@ void decode_packet(RadioData* rd) {
     case VUEP_VSOLAR:
       val = (packet[3] << 2) | (packet[4] & 0xc0) >> 6;
       print_value("vsolar", (float)(val / 300.0));
+      break;
+
+    case VP2P_UNKNOWN1:
+      val = packet[4];
+      print_value("unknown1", val);
   }
 
   print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
