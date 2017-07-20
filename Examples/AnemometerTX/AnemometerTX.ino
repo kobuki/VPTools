@@ -130,6 +130,8 @@ ecpoint im[2][2]; // 2 row x 2 col ec points as interpolation matrix
 DavisRFM69 radio;
 unsigned long lastTx;  // last time a wind data radio transmission started
 byte seqIndex;         // current packet type index in txseq_vp2
+byte channel;          // transmit channel
+byte packet[DAVIS_PACKET_LEN]; // radio packet data goes here
 char hs[24];
 char* hex = "0123456789abcdef";
 
@@ -145,12 +147,11 @@ void setup() {
   lastTx = micros();
   attachInterrupt(WIND_INTERRUPT, windInterrupt, FALLING);
   radio.initialize(FREQ_BAND_EU);
-  radio.setTxMode(true); // enable tx params, default is false, call this before the first setChannel()
-  radio.setChannel(0); // Frequency / Channel is *not* set in the initialization. Do it right after.
 #ifdef IS_RFM69HW
   radio.setHighPower(); // uncomment only for RFM69HW!
 #endif
   seqIndex = 0;
+  channel = 0;
   randomSeed(analogRead(A1));
 }
 
@@ -188,7 +189,7 @@ void loop() {
   }
   
   byte oldsi = seqIndex;
-  byte oldchan = radio.CHANNEL;
+  byte oldchan = channel;
 
   sendRadioPacket();
   packetToHex();
@@ -314,13 +315,13 @@ int interpolate(float mph, int angle) {
 // uv:    40-00-00-ff-c5-00
 // for an unconnected wind sensor wind speed and direction are both 0
 void sendRadioPacket() {
-  radio.DATA[0] = txseq_vp2[seqIndex] | TX_ID;
+  packet[0] = txseq_vp2[seqIndex] | TX_ID;
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
-  radio.DATA[1] = windSpeed;
-  radio.DATA[2] = vaneAngleRaw;
-  radio.DATA[3] = radio.DATA[4] = radio.DATA[5] = 0;
-  radio.send((const void*)radio.DATA);  
-  radio.hop();
+  packet[1] = windSpeed;
+  packet[2] = vaneAngleRaw;
+  packet[3] = packet[4] = packet[5] = 0;
+  radio.send((const void*)packet, channel);  
+  channel = radio.nextChannel(channel);
 }
 
 
@@ -353,8 +354,8 @@ void packetToHex() {
   hs[23] = 0;
   int x = 0;
   for (byte i = 0; i < 8; i++) {
-    hs[x++] = hex[radio.DATA[i] >> 4];
-    hs[x++] = hex[radio.DATA[i] & 0x0f];
+    hs[x++] = hex[packet[i] >> 4];
+    hs[x++] = hex[packet[i] & 0x0f];
     if (i < 7) hs[x++] = ' ';
   }
 }

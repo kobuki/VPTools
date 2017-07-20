@@ -95,7 +95,6 @@ class DavisRFM69 {
     static volatile byte stationsFound;
     static volatile byte curStation;
     static volatile byte numStations;
-    static volatile byte hopIndex;
     static volatile byte discChannel;
     static volatile uint32_t lastDiscStep;
     static volatile int16_t freqCorr;
@@ -113,18 +112,17 @@ class DavisRFM69 {
       _isRFM69HW = isRFM69HW;
     }
 
-    void setChannel(byte channel);
-    void hop();
+    void setChannel(byte channel, bool txCall = false);
     static uint16_t crc16_ccitt(volatile byte *buf, byte len, uint16_t initCrc = 0);
 
     void initialize(byte freqBand);
     bool canSend();
-    void send(const void* buffer);
+    void send(const void* buffer, byte channel);
     bool receiveDone();
     void setFrequency(uint32_t FRF);
     void setCS(byte newSPISlaveSelect);
-    int readRSSI(bool forceTrigger=false);
-    void setHighPower(bool onOFF=true); //have to call it after initialize for RFM69HW
+    int readRSSI(bool forceTrigger = false);
+    void setHighPower(bool onOFF = true); //have to call it after initialize for RFM69HW
     void setPowerLevel(byte level); //reduce/increase transmit power level
     void sleep();
     byte readTemperature(byte calFactor=0); //get CMOS temperature (8bit)
@@ -134,7 +132,6 @@ class DavisRFM69 {
     byte readReg(byte addr);
     void writeReg(byte addr, byte val);
     void readAllRegs();
-    void setTxMode(bool txMode);
     void setBand(byte newBand);
     void setBandwidth(byte bw);
     byte getBandTabLength();
@@ -172,6 +169,7 @@ class DavisRFM69 {
     void receiveBegin();
     void setMode(byte mode);
     void setHighPowerRegs(bool onOff);
+    void setTxMode(bool mode);
     void select();
     void unselect();
 };

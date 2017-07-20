@@ -90,8 +90,8 @@ void DavisRFM69::initialize(byte freqBand)
     //* 0x39 */ { REG_NODEADRS, nodeID }, // Turned off because we're not using address filtering
     //* 0x3a */ { REG_BROADCASTADRS, RF_BROADCASTADDRESS_VALUE }, // Not using this
     /* 0x3b REG_AUTOMODES - Automatic modes are not used in this implementation. */
-    /* 0x3c */ { REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | 0x07 }, // TX on FIFO having more than seven bytes
-    /* 0x3d */ { REG_PACKETCONFIG2, RF_PACKET2_RXRESTARTDELAY_2BITS | RF_PACKET2_AUTORXRESTART_ON | RF_PACKET2_AES_OFF }, //RXRESTARTDELAY must match transmitter PA ramp-down time (bitrate dependent)
+    /* 0x3c */ { REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | DAVIS_PACKET_LEN + 13 - 1 }, // TX on FIFO having enough bytes
+    /* 0x3d */ { REG_PACKETCONFIG2, RF_PACKET2_RXRESTARTDELAY_2BITS | RF_PACKET2_AUTORXRESTART_ON | RF_PACKET2_AES_OFF }, // RXRESTARTDELAY must match transmitter PA ramp-down time (bitrate dependent)
     /* 0x3e - 0x4d  AES Key not used in this implementation */
     /* 0x6F */ { REG_TESTDAGC, RF_DAGC_IMPROVED_LOWBETA0 }, // // TODO: Should use LOWBETA_ON, but having trouble getting it working
     /* 0x71 */ { REG_TESTAFC, 0 }, // AFC Offset for low mod index systems
@@ -142,8 +142,6 @@ void DavisRFM69::setStations(Station *_stations, byte n) {
 
 // Handle missed packets. Called from Timer1 ISR every ms
 void DavisRFM69::handleTimerInt() {
-  if (txMode) return;
-
   uint32_t lastRx = micros();
   bool readjust = false;
 
@@ -332,10 +330,15 @@ bool DavisRFM69::canSend()
 }
 
 // IMPORTANT: make sure buffer is at least 6 bytes
-void DavisRFM69::send(const void* buffer)
+void DavisRFM69::send(const void* buffer, byte channel)
 {
+  setTxMode(true);
+  noInterrupts();
   writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
+  setChannel(channel, true);
   sendFrame(buffer);
+  setTxMode(false);
+  interrupts();
 }
 
 // IMPORTANT: make sure buffer is at least 6 bytes
@@ -379,7 +382,7 @@ void DavisRFM69::sendFrame(const void* buffer)
   SPI.transfer(reverseBits(crc >> 8));
   SPI.transfer(reverseBits(crc & 0xff));
 
-  // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeaters)
+  // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeater)
   SPI.transfer(0xff);
   SPI.transfer(0xff);
 
@@ -394,7 +397,7 @@ void DavisRFM69::sendFrame(const void* buffer)
   setMode(RF69_MODE_STANDBY);
 }
 
-void DavisRFM69::setChannel(byte channel)
+void DavisRFM69::setChannel(byte channel, bool txCall)
 {
   CHANNEL = channel;
 
@@ -410,15 +413,17 @@ void DavisRFM69::setChannel(byte channel)
     a = (x & 0xff0000) >> 16;
   }
 
-  writeReg(REG_FRFMSB, a);
-  writeReg(REG_FRFMID, b);
-  writeReg(REG_FRFLSB, c);
-  if (!txMode) receiveBegin();
-}
 
-void DavisRFM69::hop()
-{
-  setChannel(nextChannel(CHANNEL));
+  // set actual TX registers if in txMode and called from an xmit routine
+  // OR not in TX mode and called from either RX interrupt or missed packet detector
+  // remaining virtual cases are undefined and not setting registers
+  if (txMode && txCall || !txMode && !txCall) {
+    writeReg(REG_FRFMSB, a);
+    writeReg(REG_FRFMID, b);
+    writeReg(REG_FRFLSB, c);
+  }
+
+  if (!txMode) receiveBegin();
 }
 
 // The data bytes come over the air from the ISS least significant bit first. Fix them as we go. From
@@ -607,16 +612,15 @@ void DavisRFM69::rcCalibration()
   while ((readReg(REG_OSC1) & RF_OSC1_RCCAL_DONE) == 0x00);
 }
 
-void DavisRFM69::setTxMode(bool txMode)
+void DavisRFM69::setTxMode(bool mode)
 {
-  DavisRFM69::txMode = txMode;
+  txMode = mode;
   if (txMode) {
-    Timer1.stop();
     writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
     writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
     writeReg(REG_PREAMBLELSB, 0);
     writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
-    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes sync
+    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes carrier
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
     writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
   } else {
@@ -625,8 +629,7 @@ void DavisRFM69::setTxMode(bool txMode)
     writeReg(REG_PREAMBLELSB, 4);
     writeReg(REG_SYNCCONFIG, RF_SYNC_ON | RF_SYNC_FIFOFILL_AUTO | RF_SYNC_SIZE_2 | RF_SYNC_TOL_2);
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
-    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN - 1));
-    Timer1.resume();
+    setChannel(stations[curStation].channel);
   }
 }
 
