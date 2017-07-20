@@ -385,6 +385,9 @@ static const uint8_t bandTabLengths[4] = {
 #define RF_FDEVMSB_9900    0x00
 #define RF_FDEVLSB_9900    0xa1
 
+#define RF_FDEVMSB_10000   0x00
+#define RF_FDEVLSB_10000   0xa4
+
 #define RF_AFCLOWBETA_ON   0x20
 #define RF_AFCLOWBETA_OFF  0x00 // Default
 

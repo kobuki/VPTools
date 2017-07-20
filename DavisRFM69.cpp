@@ -50,9 +50,9 @@ void DavisRFM69::initialize(byte freqBand)
     /* 0x01 */ { REG_OPMODE, RF_OPMODE_SEQUENCER_ON | RF_OPMODE_LISTEN_OFF | RF_OPMODE_STANDBY },
     /* 0x02 */ { REG_DATAMODUL, RF_DATAMODUL_DATAMODE_PACKET | RF_DATAMODUL_MODULATIONTYPE_FSK | RF_DATAMODUL_MODULATIONSHAPING_10 }, // Davis uses Gaussian shaping with BT=0.5
     /* 0x03 */ { REG_BITRATEMSB, RF_BITRATEMSB_19200 }, // (0x06) Davis uses a datarate of 19.2 KBPS
-    /* 0x04 */ { REG_BITRATELSB, RF_BITRATELSB_19200 }, // (0x83) 0x93 = -1%, 0xA5 = -2%
+    /* 0x04 */ { REG_BITRATELSB, RF_BITRATELSB_19200 }, // (0x83)
     /* 0x05 */ { REG_FDEVMSB, RF_FDEVMSB_9900 }, // (0x00) Davis uses a deviation of 9.9 kHz
-    /* 0x06 */ { REG_FDEVLSB, 0xA4 }, // RF_FDEVLSB_9900 },  // (0xa1) 0xA4 = 10000
+    /* 0x06 */ { REG_FDEVLSB, RF_FDEVLSB_9900 }, // (0xa1)
     /* 0x07 to 0x09 are REG_FRFMSB to LSB. No sense setting them here. Done in main routine.
     /* 0x0B */ { REG_AFCCTRL, RF_AFCLOWBETA_OFF }, // TODO: Should use LOWBETA_ON, but having trouble getting it working
     /* 0x12 */ { REG_PARAMP, RF_PARAMP_25 }, // xxx
@@ -382,6 +382,8 @@ void DavisRFM69::sendFrame(const void* buffer)
   // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeaters)
   SPI.transfer(0xff);
   SPI.transfer(0xff);
+
+  // add one extra for stability
   SPI.transfer(0xff);
 
   unselect();
@@ -610,12 +612,16 @@ void DavisRFM69::setTxMode(bool txMode)
   DavisRFM69::txMode = txMode;
   if (txMode) {
     Timer1.stop();
+    writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
+    writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
     writeReg(REG_PREAMBLELSB, 0);
     writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
     // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes sync
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
     writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
   } else {
+    writeReg(REG_FDEVMSB, RF_FDEVMSB_9900);
+    writeReg(REG_FDEVLSB, RF_FDEVLSB_9900);
     writeReg(REG_PREAMBLELSB, 4);
     writeReg(REG_SYNCCONFIG, RF_SYNC_ON | RF_SYNC_FIFOFILL_AUTO | RF_SYNC_SIZE_2 | RF_SYNC_TOL_2);
     writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
