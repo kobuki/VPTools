@@ -98,6 +98,9 @@ class DavisRFM69 {
     static volatile byte discChannel;
     static volatile uint32_t lastDiscStep;
     static volatile int16_t freqCorr;
+    static volatile bool interruptsEnabled;
+    static volatile uint32_t lastTx;
+    static volatile uint32_t txDelay;
 
     static PacketFifo fifo;
     static Station *stations;
@@ -151,7 +154,6 @@ class DavisRFM69 {
 
   protected:
     static volatile bool txMode;
-    void (*userInterrupt)();
 
     void virtual interruptHandler();
     void sendFrame(const void* buffer);
