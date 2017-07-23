@@ -62,7 +62,7 @@ void loop() {
       print_value("speed", windSpeed);
       Serial.print("raw:");
       printHex(txPacket, 10);
-      print_value(" txdelay", radio.txDelay);
+      print_value(" txdelay", radio.realTxDelay);
       print_value("channel", txChannel);
       Serial.print("freq:");
       Serial.print(freq, 3);

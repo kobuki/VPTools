@@ -29,6 +29,7 @@ volatile int16_t DavisRFM69::FEI;
 volatile bool DavisRFM69::txMode = false;
 volatile uint32_t DavisRFM69::lastTx = micros();
 volatile uint32_t DavisRFM69::txDelay = 0;
+volatile uint32_t DavisRFM69::realTxDelay = 0;
 volatile byte DavisRFM69::txChannel = -1;
 
 volatile uint32_t DavisRFM69::packets = 0;
@@ -149,6 +150,7 @@ void DavisRFM69::handleTimerInt() {
   uint32_t t = micros();
 
   if (txChannel >= 0 && t - lastTx > txDelay) {
+    realTxDelay = t - lastTx;
     (*selfPointer->txCallback)((byte*)DATA);
     selfPointer->send((byte*)DATA, txChannel);
     lastTx += txDelay;
@@ -268,7 +270,6 @@ void DavisRFM69::handleRadioInt() {
   } else {
     setChannel(CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
   }
-
 }
 
 // Calculate the next hop of the specified channel

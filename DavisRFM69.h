@@ -101,6 +101,7 @@ class DavisRFM69 {
     static volatile int16_t freqCorr;
     static volatile uint32_t lastTx;
     static volatile uint32_t txDelay;
+    static volatile uint32_t realTxDelay;
     static volatile byte txChannel;
 
     static PacketFifo fifo;
