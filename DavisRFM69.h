@@ -59,6 +59,7 @@
 #define DISCOVERY_MINGAP 70000L
 #define DISCOVERY_GUARD  60000L
 #define DISCOVERY_STEP   150000000L
+#define TX_SKIPDELAY     500L
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
@@ -98,9 +99,9 @@ class DavisRFM69 {
     static volatile byte discChannel;
     static volatile uint32_t lastDiscStep;
     static volatile int16_t freqCorr;
-    static volatile bool interruptsEnabled;
     static volatile uint32_t lastTx;
     static volatile uint32_t txDelay;
+    static volatile byte txChannel;
 
     static PacketFifo fifo;
     static Station *stations;
@@ -115,12 +116,12 @@ class DavisRFM69 {
       _isRFM69HW = isRFM69HW;
     }
 
-    void setChannel(byte channel, bool txCall = false);
+    void setChannel(byte channel);
     static uint16_t crc16_ccitt(volatile byte *buf, byte len, uint16_t initCrc = 0);
 
     void initialize(byte freqBand);
     bool canSend();
-    void send(const void* buffer, byte channel);
+    void send(const byte* buffer, byte channel);
     bool receiveDone();
     void setFrequency(uint32_t FRF);
     void setCS(byte newSPISlaveSelect);
@@ -151,12 +152,15 @@ class DavisRFM69 {
     void setRssiThreshold(int rssiThreshold);
     void setRssiThresholdRaw(int rssiThresholdRaw);
     void setFreqCorr(int16_t value);
+    void attachTxCallback(void (*function)(byte* buffer), byte channel);
+    void detachTxCallback();
 
   protected:
     static volatile bool txMode;
+    void (*txCallback)(byte* buffer);
 
     void virtual interruptHandler();
-    void sendFrame(const void* buffer);
+    void sendFrame(const byte* buffer);
     byte reverseBits(byte b);
 
     static void isr0();

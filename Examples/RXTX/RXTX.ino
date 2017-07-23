@@ -4,7 +4,7 @@
 #define TX_ID 2 // 0..7, Davis transmitter ID, set to a different value than all other transmitters
                 // IMPORTANT: set it ONE LESS than you'd set it on the ISS via the DIP switch; 1 here is 2 on the ISS/Davis console
 #define TC_CAL 1000000 // standard value is 1000000 microsecs; iss: 998787, atk: 997647
-#define TX_PERIOD (41 + TX_ID) * TC_CAL / 16 // TX_PERIOD is a function of the ID and some constants, in micros
+#define TX_PERIOD (41 + TX_ID) * TC_CAL / 16 + 100// TX_PERIOD is a function of the ID and some constants, in micros
                                              // starts at 2.5625 and increments by 0.625 up to 3.0 for every increment in TX_ID
 
 // Observed sequence of transmitted VP2 ISS value types.
@@ -22,23 +22,12 @@ static const byte txseq_vp2[20] =
   0x80, 0xe0, 0x50, 0x60
 };
 
-static const byte txseq_vue[20] =
-{
-  0x80, 0x50, 0xE0, 0x20,
-  0x80, 0x50, 0xE0, 0x70,
-  0x80, 0x50, 0xE0, 0x30,
-  0x80, 0x50, 0xE0, 0x90,
-  0x80, 0x50, 0xE0, 0xA0
-};
-
 DavisRFM69 radio;
-uint32_t tx, lastTx;
-int32_t skew = 0;
-byte seqIndex;  // current packet type index in txseq_vp2
-byte channel = 0;
-byte vaneAngleRaw, windSpeed;
-int x = 0, angle = 0, phase = 1, spdi = 1, samecnt = 3, spd = 10;
-volatile static byte packet[DAVIS_PACKET_LEN];
+byte seqIndex; // current packet type index in txseq_vp2
+byte vaneAngleRaw = 0, windSpeed = 10;
+byte txChannel = 0;
+bool txDataAvailable = false;
+volatile static byte txPacket[DAVIS_PACKET_LEN];
 
 // id, type, active
 Station stations[2] = {
@@ -49,10 +38,87 @@ Station stations[2] = {
 void setup() {
   delay(1000);
   Serial.begin(115200);
-  lastTx = micros();
   radio.setStations(stations, 2);
+  radio.attachTxCallback(preparePacket, 2);
   radio.initialize(FREQ_BAND_EU);
   seqIndex = 0;
+}
+
+void loop() {
+
+    if (txDataAvailable) {
+      txDataAvailable = false;
+  
+      uint16_t crc = radio.crc16_ccitt((volatile byte *)txPacket, 6);
+      txPacket[6] = crc >> 8;
+      txPacket[7] = crc & 0xff;
+  
+      byte a = pgm_read_byte(&bandTab[radio.band][txChannel][0]);
+      byte b = pgm_read_byte(&bandTab[radio.band][txChannel][1]);
+      byte c = pgm_read_byte(&bandTab[radio.band][txChannel][2]);
+      double freq = (((uint32_t)a<<16) | ((uint32_t)b<<8) | (uint32_t)c) * RF69_FSTEP / 1000000.0;
+    
+      print_value("T angle", vaneAngleRaw);
+      print_value("speed", windSpeed);
+      Serial.print("raw:");
+      printHex(txPacket, 10);
+      print_value(" txdelay", radio.txDelay);
+      print_value("channel", txChannel);
+      Serial.print("freq:");
+      Serial.print(freq, 3);
+      print_value(" freeram", getFreeRam());
+      Serial.println();
+
+      vaneAngleRaw = random(45, 75);
+      windSpeed = random(10, 20);
+    }
+
+    if (radio.fifo.hasElements()) {
+      RadioData* rd = radio.fifo.dequeue();
+      byte* p = rd->packet;
+
+      Serial.print("R raw:");
+      printHex(p, 10);
+      print_value(" station", p[0] & 0x7);
+      Serial.print("packets:");
+      Serial.print(radio.packets);
+      Serial.print('/');
+      Serial.print(radio.lostPackets);
+      Serial.print('/');
+      Serial.print((float)(radio.packets * 100.0 / (radio.packets + radio.lostPackets)));
+      print_value(" channel", rd->channel);
+      print_value("rssi", -rd->rssi);
+      print_value("batt", (char*)(p[0] & 0x8 ? "err" : "ok"));
+      print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
+      print_value("delta", rd->delta);
+      Serial.println();
+    }
+}
+
+void preparePacket(byte* packet) {
+  packet[0] = txseq_vp2[seqIndex] | TX_ID;
+  if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
+  packet[1] = windSpeed;
+  packet[2] = vaneAngleRaw;
+  packet[3] = packet[4] = packet[5] = 0xf0;
+  packet[8] = packet[9] = 0xff;
+  txChannel = radio.txChannel;
+  memcpy((void*)txPacket, packet, 10);
+  txDataAvailable = true;
+}
+
+void printHex(volatile byte* packet, byte len) {
+  for (byte i = 0; i < len; i++) {
+    if (!(packet[i] & 0xf0)) Serial.print('0');
+    Serial.print(packet[i], HEX);
+    if (i < len - 1) Serial.print('-');
+  }
+}
+
+int16_t getFreeRam() {
+  extern int __heap_start, *__brkval;
+  int16_t v;
+  return (int16_t) &v - (__brkval == 0 ? (int16_t) &__heap_start : (int16_t) __brkval);
 }
 
 void print_value(char* vname, char* value) {
@@ -73,95 +139,5 @@ void print_value(char* vname, long value) {
 
 void print_value(char* vname, uint32_t value) {
   Serial.print(vname); Serial.print(':'); Serial.print(value); Serial.print(' ');
-}
-
-void loop() {
-
-  lastTx = micros();
-  while(true) {
-    while (micros() - lastTx < TX_PERIOD);
-    tx = micros();
-  
-    vaneAngleRaw = angle;
-    windSpeed = spd;
-    byte oldCh = channel;
-
-    sendRadioPacket();
-
-    uint16_t crc = radio.crc16_ccitt((volatile byte *)packet, 6);
-    packet[6] = crc >> 8;
-    packet[7] = crc & 0xff;
-
-    byte a = pgm_read_byte(&bandTab[radio.band][oldCh][0]);
-    byte b = pgm_read_byte(&bandTab[radio.band][oldCh][1]);
-    byte c = pgm_read_byte(&bandTab[radio.band][oldCh][2]);
-    double freq = (((uint32_t)a<<16) | ((uint32_t)b<<8) | (uint32_t)c) * RF69_FSTEP / 1000000.0;
-  
-    print_value("T angle", vaneAngleRaw);
-    print_value("speed", windSpeed);
-    Serial.print("raw:");
-    printHex(packet, 10);
-    print_value(" txdelay", radio.txDelay);
-    // print_value("skew", skew);
-    print_value("channel", oldCh);
-    Serial.print("freq:");
-    Serial.print(freq, 3);
-    print_value(" freeram", getFreeRam());
-    Serial.println();
-
-    while (radio.fifo.hasElements()) {
-      RadioData* rd = radio.fifo.dequeue();
-      byte* p = rd->packet;
-
-      Serial.print("R raw:");
-      printHex(p, 10);
-      print_value(" station", p[0] & 0x7);
-      Serial.print("packets:");
-      Serial.print(radio.packets);
-      Serial.print('/');
-      Serial.print(radio.lostPackets);
-      Serial.print('/');
-      Serial.print((float)(radio.packets * 100.0 / (radio.packets + radio.lostPackets)));
-      print_value(" channel", rd->channel);
-      print_value("rssi", -rd->rssi);
-      print_value("batt", (char*)(p[0] & 0x8 ? "err" : "ok"));
-      print_value("fei", round(rd->fei * RF69_FSTEP / 1000));
-      print_value("delta", rd->delta);
-
-      Serial.println();
-    }
-  
-    angle = random(45, 75);
-    spd = random(10, 20);
-    lastTx = tx;
-  }
-
-}
-
-// Send out radio packet containing the wind data and the transmitter ID.
-void sendRadioPacket() {
-  packet[0] = txseq_vp2[seqIndex] | TX_ID;
-  if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
-  packet[1] = windSpeed;
-  packet[2] = vaneAngleRaw;
-  packet[3] = packet[4] = packet[5] = 0xf0;
-  packet[8] = packet[9] = 0xff;
-  radio.send((const void*)packet, channel);
-  skew = micros() - lastTx - TX_PERIOD;
-  channel = radio.nextChannel(channel);
-}
-
-void printHex(volatile byte* packet, byte len) {
-  for (byte i = 0; i < len; i++) {
-    if (!(packet[i] & 0xf0)) Serial.print('0');
-    Serial.print(packet[i], HEX);
-    if (i < len - 1) Serial.print('-');
-  }
-}
-
-int16_t getFreeRam() {
-  extern int __heap_start, *__brkval;
-  int16_t v;
-  return (int16_t) &v - (__brkval == 0 ? (int16_t) &__heap_start : (int16_t) __brkval);
 }
 

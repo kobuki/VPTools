@@ -27,9 +27,9 @@ volatile byte DavisRFM69::band = 0;
 volatile int DavisRFM69::RSSI;   // RSSI measured immediately after payload reception
 volatile int16_t DavisRFM69::FEI;
 volatile bool DavisRFM69::txMode = false;
-volatile bool DavisRFM69::interruptsEnabled = true;
 volatile uint32_t DavisRFM69::lastTx = micros();
 volatile uint32_t DavisRFM69::txDelay = 0;
+volatile byte DavisRFM69::txChannel = -1;
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -128,7 +128,7 @@ void DavisRFM69::initialize(byte freqBand)
   initStations();
   lastDiscStep = micros();
 
-  Timer1.initialize(2000); // periodical interrupts every 2 ms for missed packet detection and other checks
+  Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection and other checks
   Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
 }
 
@@ -144,27 +144,36 @@ void DavisRFM69::setStations(Station *_stations, byte n) {
 
 // Handle missed packets. Called from Timer1 ISR every ms
 void DavisRFM69::handleTimerInt() {
-  if (!interruptsEnabled) return;
+  if (txMode) return;
 
-  uint32_t lastRx = micros();
+  uint32_t t = micros();
+
+  if (txChannel >= 0 && t - lastTx > txDelay) {
+    (*selfPointer->txCallback)((byte*)DATA);
+    selfPointer->send((byte*)DATA, txChannel);
+    lastTx += txDelay;
+    txChannel = selfPointer->nextChannel(txChannel);
+    return;
+  }
+
   bool readjust = false;
 
   if (stations[curStation].interval > 0
-      && stations[curStation].lastRx + stations[curStation].interval - lastRx < DISCOVERY_GUARD
+      && stations[curStation].lastRx + stations[curStation].interval - t < DISCOVERY_GUARD
       && CHANNEL != stations[curStation].channel) {
     selfPointer->setChannel(stations[curStation].channel);
     return;
   }
 
-  if (lastRx - lastDiscStep > DISCOVERY_STEP) {
+  if (t - lastDiscStep > DISCOVERY_STEP) {
     discChannel = selfPointer->nextChannel(discChannel);
-    lastDiscStep = lastRx;
+    lastDiscStep = t;
   }
 
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
-    if (stations[i].interval > 0 && (lastRx - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
+    if (stations[i].interval > 0 && (t - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
       if (stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
       stations[i].missedPackets++;
@@ -303,7 +312,7 @@ void DavisRFM69::initStations() {
 }
 
 void DavisRFM69::interruptHandler() {
-  if (!interruptsEnabled) return;
+  if (txMode) return;
 
   RSSI = readRSSI();  // Read up front when it is most likely the carrier is still up
   if (_mode == RF69_MODE_RX && (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY))
@@ -329,28 +338,40 @@ bool DavisRFM69::canSend()
   return false;
 }
 
-// IMPORTANT: make sure buffer is at least 6 bytes
-void DavisRFM69::send(const void* buffer, byte channel)
+void DavisRFM69::setTxMode(bool mode)
 {
-  interruptsEnabled = false;
+  if (mode) {
+    txMode = mode;
+    writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
+    writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
+    writeReg(REG_PREAMBLELSB, 0);
+    writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
+    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes carrier
+    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
+    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
+  } else {
+    writeReg(REG_FDEVMSB, RF_FDEVMSB_9900);
+    writeReg(REG_FDEVLSB, RF_FDEVLSB_9900);
+    writeReg(REG_PREAMBLELSB, 4);
+    writeReg(REG_SYNCCONFIG, RF_SYNC_ON | RF_SYNC_FIFOFILL_AUTO | RF_SYNC_SIZE_2 | RF_SYNC_TOL_2);
+    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
+    txMode = mode;
+  }
+}
 
-  detachInterrupt(_interruptNum);
-  Timer1.detachInterrupt();
-
-  writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
+// IMPORTANT: make sure buffer is at least 10 bytes
+void DavisRFM69::send(const byte* buffer, byte channel)
+{
   setTxMode(true);
-  setChannel(channel, true);
+  writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
+  setChannel(channel);
   sendFrame(buffer);
   setTxMode(false);
-
-  Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
-  attachInterrupt(_interruptNum, DavisRFM69::isr0, RISING);
-
-  interruptsEnabled = true;
+  setChannel(stations[curStation].channel);
 }
 
 // IMPORTANT: make sure buffer is at least 6 bytes
-void DavisRFM69::sendFrame(const void* buffer)
+void DavisRFM69::sendFrame(const byte* buffer)
 {
   setMode(RF69_MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
   while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // Wait for ModeReady
@@ -384,7 +405,7 @@ void DavisRFM69::sendFrame(const void* buffer)
 
   // transmit first 6 byte of the buffer
   for (byte i = 0; i < 6; i++)
-    SPI.transfer(reverseBits(((byte*)buffer)[i]));
+    SPI.transfer(reverseBits(buffer[i]));
 
   // transmit crc of first 6 bytes
   SPI.transfer(reverseBits(crc >> 8));
@@ -399,16 +420,13 @@ void DavisRFM69::sendFrame(const void* buffer)
 
   unselect();
 
-  uint32_t t = micros();
-  txDelay = t - lastTx;
   setMode(RF69_MODE_TX);
   while (digitalRead(_interruptPin) == 0); // wait for DIO0 to turn HIGH signalling transmission finish
   setMode(RF69_MODE_STANDBY);
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01);
-  lastTx = t;
 }
 
-void DavisRFM69::setChannel(byte channel, bool txCall)
+void DavisRFM69::setChannel(byte channel)
 {
   CHANNEL = channel;
 
@@ -424,14 +442,9 @@ void DavisRFM69::setChannel(byte channel, bool txCall)
     a = (x & 0xff0000) >> 16;
   }
 
-  // set actual TX registers if in txMode and called from an xmit routine
-  // OR not in TX mode and called from either RX interrupt or missed packet detector
-  // remaining virtual cases are undefined and not setting registers
-  if (txMode && txCall || !txMode && !txCall) {
-    writeReg(REG_FRFMSB, a);
-    writeReg(REG_FRFMID, b);
-    writeReg(REG_FRFLSB, c);
-  }
+  writeReg(REG_FRFMSB, a);
+  writeReg(REG_FRFMID, b);
+  writeReg(REG_FRFLSB, c);
 
   if (!txMode) receiveBegin();
 }
@@ -621,27 +634,6 @@ void DavisRFM69::rcCalibration()
   while ((readReg(REG_OSC1) & RF_OSC1_RCCAL_DONE) == 0x00);
 }
 
-void DavisRFM69::setTxMode(bool mode)
-{
-  txMode = mode;
-  if (txMode) {
-    writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
-    writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
-    writeReg(REG_PREAMBLELSB, 0);
-    writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
-    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes carrier
-    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
-    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
-  } else {
-    writeReg(REG_FDEVMSB, RF_FDEVMSB_9900);
-    writeReg(REG_FDEVLSB, RF_FDEVLSB_9900);
-    writeReg(REG_PREAMBLELSB, 4);
-    writeReg(REG_SYNCCONFIG, RF_SYNC_ON | RF_SYNC_FIFOFILL_AUTO | RF_SYNC_SIZE_2 | RF_SYNC_TOL_2);
-    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN);
-    setChannel(stations[curStation].channel);
-  }
-}
-
 void DavisRFM69::setBand(byte newBand)
 {
   band = newBand;
@@ -672,4 +664,19 @@ byte DavisRFM69::getBandTabLength()
 void DavisRFM69::setFreqCorr(int value)
 {
   freqCorr = value * 1000.0 / RF69_FSTEP;
+}
+
+void DavisRFM69::attachTxCallback(void (*function)(byte* buffer), byte channel)
+{
+  txCallback = function;
+  txChannel = channel;
+  txDelay = (41 + channel) * 1000000 >> 4;
+  lastTx = micros();
+}
+
+void DavisRFM69::detachTxCallback()
+{
+  txCallback = NULL;
+  txChannel = -1;
+  txDelay = 0;
 }
