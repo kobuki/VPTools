@@ -43,6 +43,7 @@ volatile byte DavisRFM69::numStations = 0;
 volatile byte DavisRFM69::discChannel = 0;
 volatile uint32_t DavisRFM69::lastDiscStep;
 volatile int16_t DavisRFM69::freqCorr = 0;
+volatile uint32_t DavisRFM69::timeBase = 1000000;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
@@ -243,7 +244,7 @@ void DavisRFM69::handleRadioInt() {
     }
 
     if (stationsFound < numStations && stations[stIx].interval == 0) {
-      stations[stIx].interval = (41 + id) * 1000000 / 16; // Davis' official tx interval in us
+      stations[stIx].interval = (41 + id) * timeBase / 16; // Davis' official tx interval in us
       stationsFound++;
       if (lostStations > 0) lostStations--;
     }
@@ -670,7 +671,7 @@ void DavisRFM69::attachTxCallback(void (*function)(byte* buffer), byte channel)
 {
   txCallback = function;
   txChannel = channel;
-  txDelay = (41 + channel) * 1000000 >> 4;
+  txDelay = (41 + channel) * timeBase >> 4;
   lastTx = micros();
   Timer1.initialize(txDelay);
   Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
@@ -682,4 +683,9 @@ void DavisRFM69::detachTxCallback()
   txCallback = NULL;
   txChannel = -1;
   txDelay = 0;
+}
+
+void DavisRFM69::setTimeBase(uint32_t value)
+{
+  timeBase = value;
 }

@@ -15,13 +15,13 @@
 #ifndef DAVISRFM69_h
 #define DAVISRFM69_h
 
-#include <Arduino.h>            //assumes Arduino IDE v1.0 or greater
+#include <Arduino.h>            // assumes Arduino IDE v1.0 or greater
 
 #include "PacketFifo.h"
 
 #define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
 #define SPI_CS               SS // SS is the SPI slave select pin, for instance D10 on atmega328
-//#define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)
+// #define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)
 // INT0 on AVRs should be connected to RFM69's DIO0 (ex on ATmega328 it's D2, on ATmega644/1284 it's D2)
 #if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__) || defined(__AVR_ATmega88) || defined(__AVR_ATmega8__) || defined(__AVR_ATmega88__)
   #define RF69_IRQ_PIN          2
@@ -70,19 +70,19 @@ typedef struct __attribute__((packed)) Station {
   byte repeaterId;          // repeater id when packet is coming via a repeater, otherwise 0
                             // repeater IDs A..H are stored as 0x8..0xf here
   byte channel;             // rx channel the next packet of the station is expected on
-  uint32_t lastRx;      // last time a packet is seen or should have been seen when missed
-  uint32_t lastSeen;    // last factual reception time
-  uint32_t interval;      // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
-  uint32_t numResyncs;    // number of times discovery of this station started because of packet loss
-  uint32_t packets;     // total number of received packets after (re)restart
-  uint32_t missedPackets; // total number of misssed packets after (re)restart
+  uint32_t lastRx;          // last time a packet is seen or should have been seen when missed
+  uint32_t lastSeen;        // last factual reception time
+  uint32_t interval;        // packet transmit interval for the station: (41 + id) / 16 * 1M microsecs
+  uint32_t numResyncs;      // number of times discovery of this station started because of packet loss
+  uint32_t packets;         // total number of received packets after (re)restart
+  uint32_t missedPackets;   // total number of misssed packets after (re)restart
   byte lostPackets;         // missed packets since a packet was last seen from this station
 };
 
 class DavisRFM69 {
   public:
     static volatile byte DATA[DAVIS_PACKET_LEN];  // recv/xmit buf, including header, CRC, and RSSI value
-    static volatile byte _mode; //should be protected?
+    static volatile byte _mode; // should be protected?
     static volatile bool _packetReceived;
     static volatile byte CHANNEL;
     static volatile int RSSI;
@@ -102,6 +102,7 @@ class DavisRFM69 {
     static volatile uint32_t lastTx;
     static volatile uint32_t txDelay;
     static volatile uint32_t realTxDelay;
+    static volatile uint32_t timeBase;
     static volatile byte txChannel;
 
     static PacketFifo fifo;
@@ -127,11 +128,11 @@ class DavisRFM69 {
     void setFrequency(uint32_t FRF);
     void setCS(byte newSPISlaveSelect);
     int readRSSI(bool forceTrigger = false);
-    void setHighPower(bool onOFF = true); //have to call it after initialize for RFM69HW
-    void setPowerLevel(byte level); //reduce/increase transmit power level
+    void setHighPower(bool onOFF = true); // have to call it after initialize for RFM69HW
+    void setPowerLevel(byte level); // reduce/increase transmit power level
     void sleep();
-    byte readTemperature(byte calFactor=0); //get CMOS temperature (8bit)
-    void rcCalibration(); //calibrate the internal RC oscillator for use in wide temperature variations - see datasheet section [4.3.5. RC Timer Accuracy]
+    byte readTemperature(byte calFactor=0); // get CMOS temperature (8bit)
+    void rcCalibration(); // calibrate the internal RC oscillator for use in wide temperature variations - see datasheet section [4.3.5. RC Timer Accuracy]
 
     // allow hacking registers by making these public
     byte readReg(byte addr);
@@ -154,6 +155,7 @@ class DavisRFM69 {
     void setRssiThreshold(int rssiThreshold);
     void setRssiThresholdRaw(int rssiThresholdRaw);
     void setFreqCorr(int16_t value);
+    void setTimeBase(uint32_t value);
     void attachTxCallback(void (*function)(byte* buffer), byte channel);
     void detachTxCallback();
 
@@ -182,7 +184,7 @@ class DavisRFM69 {
     void unselect();
 };
 
-// FRF_MSB, FRF_MID, and FRF_LSB for the 51 North American, Australian, New Zealander & 5 European channels
+// FRF_MSB, FRF_MID, and FRF_LSB for the 51 North American, Australian, New Zealand & 5 European channels
 // used by Davis in frequency hopping
 
 #define FREQ_TABLE_LENGTH_US 51
@@ -398,17 +400,17 @@ static const uint8_t bandTabLengths[4] = {
 #define RF_AFCLOWBETA_OFF  0x00 // Default
 
 // Davis VP2 standalone station types
-#define STYPE_ISS         0x0 // ISS
-#define STYPE_TEMP_ONLY   0x1 // Temperature Only Station
-#define STYPE_HUM_ONLY    0x2 // Humidity Only Station
-#define STYPE_TEMP_HUM    0x3 // Temperature/Humidity Station
-#define STYPE_WLESS_ANEMO 0x4 // Wireless Anemometer Station
-#define STYPE_RAIN        0x5 // Rain Station
-#define STYPE_LEAF        0x6 // Leaf Station
-#define STYPE_SOIL        0x7 // Soil Station
-#define STYPE_SOIL_LEAF   0x8 // Soil/Leaf Station
-#define STYPE_SENSORLINK  0x9 // SensorLink Station (not supported for the VP2)
-#define STYPE_OFF         0xA // No station – OFF
+#define STYPE_ISS         0x0  // ISS
+#define STYPE_TEMP_ONLY   0x1  // Temperature Only Station
+#define STYPE_HUM_ONLY    0x2  // Humidity Only Station
+#define STYPE_TEMP_HUM    0x3  // Temperature/Humidity Station
+#define STYPE_WLESS_ANEMO 0x4  // Wireless Anemometer Station
+#define STYPE_RAIN        0x5  // Rain Station
+#define STYPE_LEAF        0x6  // Leaf Station
+#define STYPE_SOIL        0x7  // Soil Station
+#define STYPE_SOIL_LEAF   0x8  // Soil/Leaf Station
+#define STYPE_SENSORLINK  0x9  // SensorLink Station (not supported for the VP2)
+#define STYPE_OFF         0xA  // No station – OFF
 #define STYPE_VUE         0x10 // pseudo station type for the Vue ISS
                                // since the Vue also has a type of 0x0
 
