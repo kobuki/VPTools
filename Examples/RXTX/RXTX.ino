@@ -39,8 +39,8 @@ void setup() {
   delay(1000);
   Serial.begin(115200);
   radio.setStations(stations, 2);
-  radio.attachTxCallback(preparePacket, 2);
   radio.initialize(FREQ_BAND_EU);
+  radio.attachTxCallback(preparePacket, 2);
   seqIndex = 0;
 }
 
@@ -62,7 +62,7 @@ void loop() {
       print_value("speed", windSpeed);
       Serial.print("raw:");
       printHex(txPacket, 10);
-      print_value(" txdelay", radio.realTxDelay);
+      print_value(" txdelay", (int32_t)radio.realTxDelay);
       print_value("channel", txChannel);
       Serial.print("freq:");
       Serial.print(freq, 3);

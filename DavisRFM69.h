@@ -148,6 +148,7 @@ class DavisRFM69 {
     void nextStation();
 
     static void handleTimerInt();
+    static void handleTxInt();
     static void setStations(Station *_stations, byte n);
     void stopReceiver();
     void setRssiThreshold(int rssiThreshold);

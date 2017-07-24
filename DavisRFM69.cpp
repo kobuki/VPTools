@@ -15,6 +15,7 @@
 #include "DavisRFM69.h"
 #include "RFM69registers.h"
 #include "TimerOne.h"
+#include "MsTimer2.h"
 #include "PacketFifo.h"
 
 #include <SPI.h>
@@ -129,12 +130,13 @@ void DavisRFM69::initialize(byte freqBand)
   initStations();
   lastDiscStep = micros();
 
-  Timer1.initialize(1000); // periodical interrupts every ms for missed packet detection and other checks
-  Timer1.attachInterrupt(DavisRFM69::handleTimerInt, 0);
+  MsTimer2::set(1, DavisRFM69::handleTimerInt);
+  MsTimer2::start();
 }
 
 void DavisRFM69::stopReceiver() {
   Timer1.detachInterrupt();
+  MsTimer2::stop();
   setMode(RF69_MODE_SLEEP);
 }
 
@@ -143,21 +145,21 @@ void DavisRFM69::setStations(Station *_stations, byte n) {
   numStations = n;
 }
 
-// Handle missed packets. Called from Timer1 ISR every ms
+void DavisRFM69::handleTxInt() {
+  uint32_t t = micros();
+  realTxDelay = t - lastTx;
+  (*selfPointer->txCallback)((byte*)DATA);
+  selfPointer->send((byte*)DATA, txChannel);
+  txChannel = selfPointer->nextChannel(txChannel);
+  realTxDelay = (int32_t)(t - lastTx - txDelay);
+  lastTx = t;
+}
+
+// Handle missed packets. Called from a timer ISR every ms
 void DavisRFM69::handleTimerInt() {
   if (txMode) return;
 
   uint32_t t = micros();
-
-  if (txChannel >= 0 && t - lastTx > txDelay) {
-    realTxDelay = t - lastTx;
-    (*selfPointer->txCallback)((byte*)DATA);
-    selfPointer->send((byte*)DATA, txChannel);
-    lastTx += txDelay;
-    txChannel = selfPointer->nextChannel(txChannel);
-    return;
-  }
-
   bool readjust = false;
 
   if (stations[curStation].interval > 0
@@ -221,7 +223,7 @@ void DavisRFM69::handleRadioInt() {
     repeaterCrcTried = true;
   }
 
-  delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
+  //delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
                                    // probably needed by the module to settle something after RX
 
   // fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, lastRx - stations[curStation].lastRx);
@@ -673,10 +675,13 @@ void DavisRFM69::attachTxCallback(void (*function)(byte* buffer), byte channel)
   txChannel = channel;
   txDelay = (41 + channel) * 1000000 >> 4;
   lastTx = micros();
+  Timer1.initialize(txDelay);
+  Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
 }
 
 void DavisRFM69::detachTxCallback()
 {
+  Timer1.detachInterrupt();
   txCallback = NULL;
   txChannel = -1;
   txDelay = 0;
