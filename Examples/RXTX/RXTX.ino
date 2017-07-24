@@ -40,7 +40,7 @@ void setup() {
   Serial.begin(115200);
   radio.setStations(stations, 2);
   radio.initialize(FREQ_BAND_EU);
-  radio.attachTxCallback(preparePacket, 2);
+  radio.enableTx(preparePacket, 2);
   seqIndex = 0;
 }
 

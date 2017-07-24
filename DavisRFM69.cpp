@@ -667,7 +667,7 @@ void DavisRFM69::setFreqCorr(int value)
   freqCorr = value * 1000.0 / RF69_FSTEP;
 }
 
-void DavisRFM69::attachTxCallback(void (*function)(byte* buffer), byte channel)
+void DavisRFM69::enableTx(void (*function)(byte* buffer), byte channel)
 {
   txCallback = function;
   txChannel = channel;
@@ -677,7 +677,7 @@ void DavisRFM69::attachTxCallback(void (*function)(byte* buffer), byte channel)
   Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
 }
 
-void DavisRFM69::detachTxCallback()
+void DavisRFM69::disableTx()
 {
   Timer1.detachInterrupt();
   txCallback = NULL;

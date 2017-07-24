@@ -156,8 +156,8 @@ class DavisRFM69 {
     void setRssiThresholdRaw(int rssiThresholdRaw);
     void setFreqCorr(int16_t value);
     void setTimeBase(uint32_t value);
-    void attachTxCallback(void (*function)(byte* buffer), byte channel);
-    void detachTxCallback();
+    void enableTx(void (*function)(byte* buffer), byte channel);
+    void disableTx();
 
   protected:
     static volatile bool txMode;
