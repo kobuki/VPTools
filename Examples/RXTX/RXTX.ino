@@ -3,8 +3,6 @@
 
 #define TX_ID 2 // 0..7, Davis transmitter ID, set to a different value than all other transmitters
                 // IMPORTANT: set it ONE LESS than you'd set it on the ISS via the DIP switch; 1 here is 2 on the ISS/Davis console
-#define TX_PERIOD (41 + TX_ID) * TC_CAL / 16 + 100// TX_PERIOD is a function of the ID and some constants, in micros
-                                             // starts at 2.5625 and increments by 0.625 up to 3.0 for every increment in TX_ID
 
 // Transmitter timing constants (for 2 of my own Davis transmitters),
 // can be used to adapt to local XCO/resonator frequency errors
@@ -43,6 +41,7 @@ void setup() {
   delay(1000);
   Serial.begin(115200);
   radio.setStations(stations, 2);
+  // radio.setTimeBase(1000000);
   radio.initialize(FREQ_BAND_EU);
   radio.enableTx(preparePacket, 2);
   seqIndex = 0;
@@ -99,9 +98,13 @@ void loop() {
     }
 }
 
+// fill transmitted packet payload here, use proper type sequence; channel hopping is automatic
+// do NOT prepare values here, use values prepared in loop(), etc.
+// called from an ISR so must be as fast as possible
 void preparePacket(byte* packet) {
   packet[0] = txseq_vp2[seqIndex] | TX_ID;
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
+  // dummy data
   packet[1] = windSpeed;
   packet[2] = vaneAngleRaw;
   packet[3] = packet[4] = packet[5] = 0xf0;
