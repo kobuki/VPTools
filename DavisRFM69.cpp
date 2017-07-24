@@ -223,9 +223,6 @@ void DavisRFM69::handleRadioInt() {
     repeaterCrcTried = true;
   }
 
-  //delayMicroseconds(POST_RX_WAIT); // we need this, no idea why, but makes reception almost perfect
-                                   // probably needed by the module to settle something after RX
-
   // fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, lastRx - stations[curStation].lastRx);
 
   // packet passed crc?
