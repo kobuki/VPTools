@@ -3,9 +3,12 @@
 
 #define TX_ID 2 // 0..7, Davis transmitter ID, set to a different value than all other transmitters
                 // IMPORTANT: set it ONE LESS than you'd set it on the ISS via the DIP switch; 1 here is 2 on the ISS/Davis console
-#define TC_CAL 1000000 // standard value is 1000000 microsecs; iss: 998787, atk: 997647
 #define TX_PERIOD (41 + TX_ID) * TC_CAL / 16 + 100// TX_PERIOD is a function of the ID and some constants, in micros
                                              // starts at 2.5625 and increments by 0.625 up to 3.0 for every increment in TX_ID
+
+// Transmitter timing skew (for my own transmitters), can be used to fix:
+// iss: 0.998787
+// atk: 0.997647
 
 // Observed sequence of transmitted VP2 ISS value types.
 // The upper nibble is important, the lower nibble is the transmitter ID + battery flag.
