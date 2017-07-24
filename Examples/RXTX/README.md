@@ -1,0 +1,1 @@
+This is a sample to show how to receive and transmit simultaneously using the library functions.
