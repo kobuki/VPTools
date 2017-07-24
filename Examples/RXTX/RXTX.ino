@@ -6,9 +6,10 @@
 #define TX_PERIOD (41 + TX_ID) * TC_CAL / 16 + 100// TX_PERIOD is a function of the ID and some constants, in micros
                                              // starts at 2.5625 and increments by 0.625 up to 3.0 for every increment in TX_ID
 
-// Transmitter timing skew (for my own transmitters), can be used to fix:
-// iss: 0.998787
-// atk: 0.997647
+// Transmitter timing constants (for 2 of my own Davis transmitters),
+// can be used to adapt to local XCO/resonator frequency errors
+// iss: 0.998787 -> setTimeBase(998787)
+// atk: 0.997647 -> setTimeBase(997647)
 
 // Observed sequence of transmitted VP2 ISS value types.
 // The upper nibble is important, the lower nibble is the transmitter ID + battery flag.
