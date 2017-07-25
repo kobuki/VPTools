@@ -12,8 +12,8 @@
 // Observed sequence of transmitted VP2 ISS value types.
 // The upper nibble is important, the lower nibble is the transmitter ID + battery flag.
 // Type values for a standard VP2 ISS:
-//   0x80  0xe0  0x40  0xa0  0x60  0x50   0x90
-//   temp  rain  uv    rh    sol   rsecs  gust
+//   0x80  0xe0  0x40  0xa0  0x60  0x50  0x90
+//   temp  rain  uv    rh    sol   rsecs gust
 // Wind speed and direction is transmitted in every packet at byte offsets 1 and 2.
 static const byte txseq_vp2[20] =
 {

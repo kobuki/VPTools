@@ -59,7 +59,7 @@
 #define DISCOVERY_MINGAP 70000L
 #define DISCOVERY_GUARD  60000L
 #define DISCOVERY_STEP   150000000L
-#define TX_SKIPDELAY     500L
+#define SPI_OP_TIMEOUT   15000L
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {

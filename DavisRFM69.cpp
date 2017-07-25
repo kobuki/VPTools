@@ -31,7 +31,7 @@ volatile bool DavisRFM69::txMode = false;
 volatile uint32_t DavisRFM69::lastTx = micros();
 volatile uint32_t DavisRFM69::txDelay = 0;
 volatile uint32_t DavisRFM69::realTxDelay = 0;
-volatile byte DavisRFM69::txChannel = -1;
+volatile byte DavisRFM69::txChannel = 255;
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -363,19 +363,25 @@ void DavisRFM69::setTxMode(bool mode)
 // IMPORTANT: make sure buffer is at least 10 bytes
 void DavisRFM69::send(const byte* buffer, byte channel)
 {
+  MsTimer2::stop();
   setTxMode(true);
   writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
   setChannel(channel);
   sendFrame(buffer);
   setTxMode(false);
   setChannel(stations[curStation].channel);
+  MsTimer2::start();
 }
 
 // IMPORTANT: make sure buffer is at least 6 bytes
 void DavisRFM69::sendFrame(const byte* buffer)
 {
   setMode(RF69_MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
-  while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // Wait for ModeReady
+  uint32_t t = micros();
+  // Wait for ModeReady using 15 ms timeout
+  while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00) {
+    if (micros() - t > SPI_OP_TIMEOUT) return;
+  }
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00); // DIO0 is "Packet Sent"
 
   // calculate crc on first 6 bytes (no repeater info)
@@ -422,7 +428,8 @@ void DavisRFM69::sendFrame(const byte* buffer)
   unselect();
 
   setMode(RF69_MODE_TX);
-  while (digitalRead(_interruptPin) == 0); // wait for DIO0 to turn HIGH signalling transmission finish
+  t = micros(); // wait SPI_OP_TIMEOUT ms max (transmission time is about 9.5 ms)
+  while (digitalRead(_interruptPin) == 0 && micros() - t < SPI_OP_TIMEOUT); // wait for DIO0 to turn HIGH signalling transmission finish
   setMode(RF69_MODE_STANDBY);
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01);
 }
@@ -681,7 +688,7 @@ void DavisRFM69::disableTx()
 {
   Timer1.detachInterrupt();
   txCallback = NULL;
-  txChannel = -1;
+  txChannel = 255;
   txDelay = 0;
 }
 
