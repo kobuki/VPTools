@@ -410,8 +410,12 @@ void DavisRFM69::sendFrame(const byte* buffer)
   SPI.transfer(0xcb);
   SPI.transfer(0x89);
 
-  // transmit first 6 byte of the buffer
-  for (byte i = 0; i < 6; i++)
+  // make sure we use the correct transmitter ID
+  byte byte0 = buffer[0] & 0xf0 | txChannel;
+  SPI.transfer(reverseBits(byte0));
+
+  // transmit the remaining bytes of the buffer
+  for (byte i = 1; i < 6; i++)
     SPI.transfer(reverseBits(buffer[i]));
 
   // transmit crc of first 6 bytes
