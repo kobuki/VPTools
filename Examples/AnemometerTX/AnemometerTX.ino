@@ -305,8 +305,9 @@ int interpolate(float mph, int angle) {
   return round(ecmph);
 }
 
-// Send out radio packet containing the wind data and the transmitter ID.
+// Fill radio packet payload containing the wind data and the transmitter ID.
 // Every packet contains dummy data on other sensors in the proper transmit sequence.
+// This function is called from the transmission timer ISR.
 void preparePacket(byte* packet) {
   packet[0] = txseq_vp2[seqIndex] | TX_ID;
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
