@@ -32,8 +32,6 @@
 
 #define TX_ID 2 // 0..7, Davis transmitter ID, set to a different value than all other transmitters
                 // IMPORTANT: set it ONE LESS than you'd set it on the ISS via the DIP switch; 1 here is 2 on the ISS/Davis console
-#define TX_PERIOD (41 + TX_ID) * 1000000 / 16 // TX_PERIOD is a function of the ID and some constants, in micros
-                                              // starts at 2.5625 and increments by 0.625 up to 3.0 for every increment in TX_ID
 
 // ----- Constant Definitions -----
 
@@ -120,9 +118,9 @@ volatile unsigned long rotationPeriod;   // duration of last measured period, in
 volatile unsigned long sampleStart;      // first pulse started at, in micros during a TX_PERIOD
 volatile int pulseCount;                 // number of sensed rotation pulses during a TX_PERIOD
 
-byte vaneAngleRaw; // angle of the anemometer, raw byte value for the radio packet
-byte windSpeed;    // calculated wind speed value in mph, with or without EC applied
-int vaneAngle;     // real angle of the anemometer in degrees, used for EC
+byte vaneAngleRaw = 0; // angle of the anemometer, raw byte value for the radio packet
+byte windSpeed = 0;    // calculated wind speed value in mph, with or without EC applied
+int vaneAngle;         // real angle of the anemometer in degrees, used for EC
 int rnd = 0;
 
 ecpoint im[2][2]; // 2 row x 2 col ec points as interpolation matrix
@@ -131,9 +129,8 @@ DavisRFM69 radio;
 unsigned long lastTx;  // last time a wind data radio transmission started
 byte seqIndex;         // current packet type index in txseq_vp2
 byte channel;          // transmit channel
-byte packet[DAVIS_PACKET_LEN]; // radio packet data goes here
-char hs[24];
-char* hex = "0123456789abcdef";
+byte txPacket[DAVIS_PACKET_LEN]; // radio packet data goes here
+bool txDataAvailable = false;
 
 
 // ----- Standard Arduino Routines -----
@@ -147,17 +144,18 @@ void setup() {
   lastTx = micros();
   attachInterrupt(WIND_INTERRUPT, windInterrupt, FALLING);
   radio.initialize(FREQ_BAND_EU);
+  radio.enableTx(preparePacket, TX_ID);
+  seqIndex = 0;
 #ifdef IS_RFM69HW
   radio.setHighPower(); // uncomment only for RFM69HW!
 #endif
   seqIndex = 0;
-  channel = 0;
   randomSeed(analogRead(A1));
 }
 
 void loop() {
-  if (micros() - lastTx < TX_PERIOD + rnd) return;
-  lastTx = micros();
+  if (!txDataAvailable) return;
+  txDataAvailable = false;
 
   readVaneValue();
   vaneAngle = rawAngleToDegrees(vaneAngleRaw);
@@ -191,9 +189,6 @@ void loop() {
   byte oldsi = seqIndex;
   byte oldchan = channel;
 
-  sendRadioPacket();
-  packetToHex();
-  
   Serial.print("angle: ");
   Serial.print(vaneAngle);
   Serial.print("\tspeed");
@@ -209,7 +204,8 @@ void loop() {
   Serial.print("\tchan: ");
   Serial.print(oldchan);
   Serial.print("\tpacket: ");
-  Serial.println(hs);
+  printHex(txPacket, 10);
+  Serial.println();
 
   pulseCount = 0;
   sampleStart = 0;
@@ -308,14 +304,16 @@ int interpolate(float mph, int angle) {
 
 // Send out radio packet containing the wind data and the transmitter ID.
 // Every packet contains dummy data on other sensors in the proper transmit sequence.
-void sendRadioPacket() {
+void preparePacket(byte* packet) {
   packet[0] = txseq_vp2[seqIndex] | TX_ID;
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
+  // store wind speed/direction in every packet
   packet[1] = windSpeed;
   packet[2] = vaneAngleRaw;
+  // dummy data
   packet[3] = packet[4] = packet[5] = 0;
-  radio.send((const void*)packet, channel);  
-  channel = radio.nextChannel(channel);
+  memcpy((void*)txPacket, packet, 10);
+  txDataAvailable = true;
 }
 
 
@@ -344,13 +342,11 @@ int analogReadAvg(byte port, byte n) {
   return val;
 }
 
-void packetToHex() {
-  hs[23] = 0;
-  int x = 0;
-  for (byte i = 0; i < 8; i++) {
-    hs[x++] = hex[packet[i] >> 4];
-    hs[x++] = hex[packet[i] & 0x0f];
-    if (i < 7) hs[x++] = ' ';
+void printHex(volatile byte* packet, byte len) {
+  for (byte i = 0; i < len; i++) {
+    if (!(packet[i] & 0xf0)) Serial.print('0');
+    Serial.print(packet[i], HEX);
+    if (i < len - 1) Serial.print('-');
   }
 }
 
