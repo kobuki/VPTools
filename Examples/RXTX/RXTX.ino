@@ -43,7 +43,7 @@ void setup() {
   radio.setStations(stations, 2);
   // radio.setTimeBase(1000000);
   radio.initialize(FREQ_BAND_EU);
-  radio.enableTx(preparePacket, 2);
+  radio.enableTx(preparePacket, TX_ID);
   seqIndex = 0;
 }
 
