@@ -97,14 +97,17 @@ static const byte txseq_vue[20] =
 };
 
 // "No sensor" packets for VP2:
-// wind:     packet[1:2] (ww, dd) is 0 for all packet types
-// temp:     80 ww dd FF C1 00
-// rh:       A0 ww dd 00 01 00
-// rain:     E0 ww dd 80 01 00
-// rainrate: 50 ww dd FF 71 00
-// UV:       40 ww dd FF C5 00
-// solar:    60 ww dd FF C5 00
-// gust:     90 ww dd 00 05 00
+// wind:           packet[1:2] (ww, dd) is 0 for all packet types
+// temp:           80 ww dd FF C1 00
+// rh:             A0 ww dd 00 01 00
+// rain:           E0 ww dd 80 01 00
+// rainrate:       50 ww dd FF 71 00
+// UV:             40 ww dd FF C5 00
+// solar:          60 ww dd FF C5 00
+// gust:           90 ww dd 00 05 00
+// unknown (VP2):  c0 ww dd 00 xx 00 - xx: 0-3 (ATK) or 5 (temp/hum), choose freely
+// unknown (Vue):  30 ww dd F9 40 xx - xx: BE or B9 (other values possible), choose freely
+//                                     this is not actually not vacant sensor data, but should do
 
 // ----- Global Types and Variable Declarations -----
 
