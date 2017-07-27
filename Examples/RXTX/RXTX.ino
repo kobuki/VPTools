@@ -102,7 +102,7 @@ void loop() {
 // do NOT prepare values here, use values prepared in loop(), etc.
 // called from an ISR so must be as fast as possible
 void preparePacket(byte* packet) {
-  packet[0] = txseq_vp2[seqIndex] | TX_ID;
+  packet[0] = txseq_vp2[seqIndex]; // station ID is set in the ISR
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
   // dummy data
   packet[1] = windSpeed;
