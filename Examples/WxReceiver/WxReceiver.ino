@@ -40,7 +40,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017091301")
+#define NAME_VERSION F("WxReceiver v2017091302")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -474,6 +474,8 @@ void cmdShowDefaults()
   Serial.print(cfgBandRaw);
   Serial.print(F(" x"));
   Serial.print(cfgRfSensitivity);
+  Serial.print(F(" r"));
+  Serial.print(cfgRepeaterPT);
   Serial.println(running ? F(" running") : F(" stopped"));
 }
 
