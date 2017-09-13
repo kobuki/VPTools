@@ -104,6 +104,7 @@ class DavisRFM69 {
     static volatile uint32_t realTxDelay;
     static volatile uint32_t timeBase;
     static volatile byte txChannel;
+    static volatile bool repeaterPT;
 
     static PacketFifo fifo;
     static Station *stations;
@@ -156,6 +157,7 @@ class DavisRFM69 {
     void setRssiThresholdRaw(int rssiThresholdRaw);
     void setFreqCorr(int16_t value);
     void setTimeBase(uint32_t value);
+    void setRepeaterPT(bool value = false);
     void enableTx(void (*function)(byte* buffer), byte channel);
     void disableTx();
 
@@ -413,6 +415,9 @@ static const uint8_t bandTabLengths[4] = {
 #define STYPE_OFF         0xA  // No station – OFF
 #define STYPE_VUE         0x10 // pseudo station type for the Vue ISS
                                // since the Vue also has a type of 0x0
+
+// aliases
+#define STYPE_ATK         STYPE_WLESS_ANEMO
 
 // Below are known, publicly documented packet types for the VP2 and the Vue.
 

@@ -78,6 +78,7 @@ byte cfgBandRaw = 1;
 byte cfgBand = FREQ_BAND_EU;
 byte cfgRfSensitivity = 190;
 byte cfgOutput = 0;
+byte cfgRepeaterPT = 0;
 
 // id, type, active
 Station stations[8] = {
@@ -205,7 +206,11 @@ void processSerial()
 
       switch(s[0]) {
         case 'r':
-          cmdReset();
+          if (s[1] > 0) {
+            cmdRepeaterPT(s + 1);
+          } else {
+            cmdReset();
+          }
           break;
     
         case 't':
@@ -347,6 +352,21 @@ void cmdReset()
   printStatusF(S_OK, F("resetting"));
   stopReceiver();
   softReset();
+}
+
+void cmdRepeaterPT(char *s)
+{
+  if (s[0] == '1') {
+    cfgRepeaterPT = 1;
+    radio.setRepeaterPT(true);
+    printStatusF(S_OK, F("repeater pass-through enabled"));
+  } else if (s[0] == '0') {
+    cfgRepeaterPT = 0;
+    radio.setRepeaterPT(false);
+    printStatusF(S_OK, F("repeater pass-through disabled"));
+  } else {
+    printStatus(S_ERR);
+  }
 }
 
 void cmdTransmitter(char *s)

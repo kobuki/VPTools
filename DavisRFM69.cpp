@@ -44,6 +44,7 @@ volatile byte DavisRFM69::discChannel = 0;
 volatile uint32_t DavisRFM69::lastDiscStep;
 volatile int16_t DavisRFM69::freqCorr = 0;
 volatile uint32_t DavisRFM69::timeBase = 1000000;
+volatile bool DavisRFM69::repeaterPT = false;
 
 PacketFifo DavisRFM69::fifo;
 Station *DavisRFM69::stations;
@@ -237,8 +238,8 @@ void DavisRFM69::handleRadioInt() {
     // OR packet passed the repeater crc check, but no repeater is set for the station
     // OR packet passed the normal crc check, and repeater is set for the station
     if (stIx < 0
-        || (repeaterCrcTried && stations[stIx].repeaterId == 0)
-        || (!repeaterCrcTried && stations[stIx].repeaterId != 0)) {
+        || (!repeaterPT && repeaterCrcTried && stations[stIx].repeaterId == 0)
+        || (!repeaterPT && !repeaterCrcTried && stations[stIx].repeaterId != 0)) {
       setChannel(CHANNEL);
       return;
     }
@@ -699,4 +700,9 @@ void DavisRFM69::disableTx()
 void DavisRFM69::setTimeBase(uint32_t value)
 {
   timeBase = value;
+}
+
+void DavisRFM69::setRepeaterPT(bool value)
+{
+  repeaterPT = value;
 }
