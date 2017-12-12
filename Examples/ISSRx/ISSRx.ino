@@ -22,9 +22,10 @@ Station stations[3] = {
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  radio.setStations(stations, 3);
+  radio.setStations(stations, 2);
   radio.initialize(FREQ_BAND_EU);
   radio.setBandwidth(RF69_DAVIS_BW_NARROW);
+  radio.setRssiThreshold(-95);
 }
 
 void loop() {

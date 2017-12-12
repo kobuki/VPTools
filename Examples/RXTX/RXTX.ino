@@ -98,11 +98,14 @@ void loop() {
     }
 }
 
+
+// ----- Payload assembly -----
+
 // fill transmitted packet payload here, use proper type sequence; channel hopping is automatic
 // do NOT prepare values here, use values prepared in loop(), etc.
 // called from an ISR so must be as fast as possible
 void preparePacket(byte* packet) {
-  packet[0] = txseq_vp2[seqIndex] | radio.txChannel; // station ID is set in the ISR
+  packet[0] = txseq_vp2[seqIndex] | radio.txId; // station ID is set in the ISR
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
   // dummy data
   packet[1] = windSpeed;

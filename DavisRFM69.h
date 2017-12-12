@@ -103,7 +103,9 @@ class DavisRFM69 {
     static volatile uint32_t txDelay;
     static volatile uint32_t realTxDelay;
     static volatile uint32_t timeBase;
+    static volatile byte txId;
     static volatile byte txChannel;
+    static volatile byte rxRssi;
     static volatile bool repeaterPT;
 
     static PacketFifo fifo;
@@ -158,7 +160,7 @@ class DavisRFM69 {
     void setFreqCorr(int16_t value);
     void setTimeBase(uint32_t value);
     void setRepeaterPT(bool value = false);
-    void enableTx(void (*function)(byte* buffer), byte channel);
+    void enableTx(void (*function)(byte* buffer), byte ID);
     void disableTx();
 
   protected:

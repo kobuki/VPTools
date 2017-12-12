@@ -31,7 +31,9 @@ volatile bool DavisRFM69::txMode = false;
 volatile uint32_t DavisRFM69::lastTx = micros();
 volatile uint32_t DavisRFM69::txDelay = 0;
 volatile uint32_t DavisRFM69::realTxDelay = 0;
+volatile byte DavisRFM69::txId = 255;
 volatile byte DavisRFM69::txChannel = 255;
+volatile byte DavisRFM69::rxRssi = 160; // -80 dB
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -40,7 +42,7 @@ volatile uint32_t DavisRFM69::lostStations = 0;
 volatile byte DavisRFM69::stationsFound = 0;
 volatile byte DavisRFM69::curStation = 0;
 volatile byte DavisRFM69::numStations = 0;
-volatile byte DavisRFM69::discChannel = 0;
+volatile byte DavisRFM69::discChannel = 2;
 volatile uint32_t DavisRFM69::lastDiscStep;
 volatile int16_t DavisRFM69::freqCorr = 0;
 volatile uint32_t DavisRFM69::timeBase = 1000000;
@@ -225,7 +227,7 @@ void DavisRFM69::handleRadioInt() {
     repeaterCrcTried = true;
   }
 
-  // fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, lastRx - stations[curStation].lastRx);
+  // fifo.queue((byte*)DATA, CHANNEL, -RSSI, FEI, lastRx - stations[curStation].lastSeen);
 
   // packet passed crc?
   if (calcCrc == rxCrc && rxCrc != 0) {
@@ -412,7 +414,7 @@ void DavisRFM69::sendFrame(const byte* buffer)
   SPI.transfer(0x89);
 
   // make sure we use the correct transmitter ID
-  byte byte0 = buffer[0] & 0xf0 | txChannel;
+  byte byte0 = buffer[0] & 0xf0 | txId;
   SPI.transfer(reverseBits(byte0));
 
   // transmit the remaining bytes of the buffer
@@ -459,7 +461,10 @@ void DavisRFM69::setChannel(byte channel)
   writeReg(REG_FRFMID, b);
   writeReg(REG_FRFLSB, c);
 
-  if (!txMode) receiveBegin();
+  if (!txMode) {
+    receiveBegin();
+    setRssiThresholdRaw(rxRssi);
+  }
 }
 
 // The data bytes come over the air from the ISS least significant bit first. Fix them as we go. From
@@ -542,11 +547,12 @@ bool DavisRFM69::receiveDone() {
 }
 
 void DavisRFM69::setRssiThreshold(int rssiThreshold) {
-  writeReg(REG_RSSIVALUE, abs(rssiThreshold) << 1);
+  setRssiThresholdRaw(abs(rssiThreshold) << 1);
 }
 
 void DavisRFM69::setRssiThresholdRaw(int rssiThresholdRaw) {
   writeReg(REG_RSSIVALUE, rssiThresholdRaw);
+  rxRssi = rssiThresholdRaw;
 }
 
 int DavisRFM69::readRSSI(bool forceTrigger) {
@@ -679,11 +685,12 @@ void DavisRFM69::setFreqCorr(int value)
   freqCorr = value * 1000.0 / RF69_FSTEP;
 }
 
-void DavisRFM69::enableTx(void (*function)(byte* buffer), byte channel)
+void DavisRFM69::enableTx(void (*function)(byte* buffer), byte ID)
 {
   txCallback = function;
-  txChannel = channel;
-  txDelay = (41 + channel) * timeBase >> 4;
+  txId = ID;
+  txChannel = 0;
+  txDelay = (41 + txId) * timeBase >> 4;
   lastTx = micros();
   Timer1.initialize(txDelay);
   Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
@@ -693,6 +700,7 @@ void DavisRFM69::disableTx()
 {
   Timer1.detachInterrupt();
   txCallback = NULL;
+  txId = 255;
   txChannel = 255;
   txDelay = 0;
 }

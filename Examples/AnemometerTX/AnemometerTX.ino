@@ -131,7 +131,6 @@ ecpoint im[2][2]; // 2 row x 2 col ec points as interpolation matrix
 DavisRFM69 radio;
 unsigned long lastTx;  // last time a wind data radio transmission started
 byte seqIndex;         // current packet type index in txseq_vp2
-byte channel;          // transmit channel
 byte txPacket[DAVIS_PACKET_LEN]; // radio packet data goes here
 bool txDataAvailable = false;
 
@@ -154,6 +153,7 @@ void setup() {
 #endif
   seqIndex = 0;
   randomSeed(analogRead(A1));
+  delay(5000);
 }
 
 void loop() {
@@ -189,9 +189,6 @@ void loop() {
     }
   }
   
-  byte oldsi = seqIndex;
-  byte oldchan = channel;
-
   Serial.print("angle: ");
   Serial.print(vaneAngle);
   Serial.print("\tspeed");
@@ -203,9 +200,9 @@ void loop() {
   Serial.print("\tperiod: ");
   Serial.print(period);
   Serial.print("\ttxseq_vp2: ");
-  Serial.print(oldsi);
+  Serial.print(seqIndex);
   Serial.print("\tchan: ");
-  Serial.print(oldchan);
+  Serial.print(radio.txChannel);
   Serial.print("\tpacket: ");
   printHex(txPacket, 10);
   Serial.println();
@@ -305,11 +302,14 @@ int interpolate(float mph, int angle) {
   return round(ecmph);
 }
 
+
+// ----- Payload assembly -----
+
 // Fill radio packet payload containing the wind data and the transmitter ID.
 // Every packet contains dummy data on other sensors in the proper transmit sequence.
 // This function is called from the transmission timer ISR.
 void preparePacket(byte* packet) {
-  packet[0] = txseq_vp2[seqIndex] | radio.txChannel; // station ID is set in the ISR, but we need it here for logging
+  packet[0] = txseq_vp2[seqIndex] | radio.txId; // station ID is set in the ISR, but we need it here for logging
   if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
   // store wind speed/direction in every packet
   packet[1] = windSpeed;
