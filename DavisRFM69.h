@@ -48,18 +48,18 @@
 #define RF69_DAVIS_BW_WIDE    2
 
 #define null                  0
-#define COURSE_TEMP_COEF    -90 // puts the temperature reading in the ballpark, user can fine tune the returned value
-#define RF69_FSTEP 61.03515625  // == FXOSC/2^19 = 32mhz/2^19 (p13 in DS)
+#define COURSE_TEMP_COEF    -90     // puts the temperature reading in the ballpark, user can fine tune the returned value
+#define RF69_FSTEP 61.03515625      // FXOSC/2^19 (see datasheet)
 
-#define RESYNC_THRESHOLD 50       // max. number of lost packets from a station before rediscovery
-#define LATE_PACKET_THRESH 5000   // packet is considered missing after this many micros
-#define POST_RX_WAIT 2000         // RX "settle" delay
-#define MAX_STATIONS 8            // max. stations this code is able to handle
+#define RESYNC_THRESHOLD 50         // max. number of lost packets from a station before rediscovery
+#define LATE_PACKET_THRESH 5000L    // packet is considered missing after this delay (micros)
+#define POST_RX_WAIT 2000L          // RX "settle" delay
+#define MAX_STATIONS 8              // max. stations this code is able to handle
 
-#define DISCOVERY_MINGAP 70000L
-#define DISCOVERY_GUARD  60000L
-#define DISCOVERY_STEP   150000000L
-#define SPI_OP_TIMEOUT   15000L
+#define DISCOVERY_MINGAP 70000L     // time before expected transmission to keep discovery frequency on
+#define DISCOVERY_GUARD  20000L     // time before expected transmission to switch on receiver
+#define DISCOVERY_STEP   150000000L // time before skipping the discovery channel to avoid interference
+#define SPI_OP_TIMEOUT   15000L     // SPI operation time guard
 
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
