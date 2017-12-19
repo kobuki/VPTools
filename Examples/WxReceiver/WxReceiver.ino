@@ -9,14 +9,14 @@
 #include "PacketFifo.h"
 
 // Enable sensor emulation for testing drivers - select ONLY this and nothing else
-#define SENSOR_TYPE_EMULATED
+//#define SENSOR_TYPE_EMULATED
 
 // Enable separate T/H chip (Si7021 or HTU21D)
 //#define SENSOR_TYPE_SI7021
 
 // Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_BMP180
-//#define SENSOR_TYPE_BMP280
+#define SENSOR_TYPE_BMP280
 //#define SENSOR_TYPE_BME280
 
 // change this according to your setup/devboard
@@ -40,7 +40,7 @@
 #include <SparkFunBME280.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2017091302")
+#define NAME_VERSION F("WxReceiver v2017121901")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
