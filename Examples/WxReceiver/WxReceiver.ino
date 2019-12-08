@@ -18,10 +18,12 @@
 //#define SENSOR_TYPE_BMP180
 #define SENSOR_TYPE_BMP280
 //#define SENSOR_TYPE_BME280
+//#define SENSOR_TYPE_BMP388
 
 // change this according to your setup/devboard
 #define I2C_BME280 0x76
 #define I2C_BMP280 0x76
+#define I2C_BMP388 0x76
 
 #ifdef SENSOR_TYPE_BMP180
 #include <SFE_BMP180.h>
@@ -38,6 +40,11 @@
 
 #ifdef SENSOR_TYPE_BME280
 #include <SparkFunBME280.h>
+#endif
+
+#ifdef SENSOR_TYPE_BMP388
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BMP3XX.h>
 #endif
 
 #define NAME_VERSION F("WxReceiver v2018021601")
@@ -67,6 +74,10 @@ Adafruit_BMP280 bmp280;
 
 #ifdef SENSOR_TYPE_BME280
 BME280 bme280;
+#endif
+
+#ifdef SENSOR_TYPE_BMP388
+Adafruit_BMP3XX bmp388;
 #endif
 
 bool localEcho = false;
@@ -100,7 +111,6 @@ void setup() {
 #ifdef SENSOR_TYPE_BME280
   bme280.settings.commInterface = I2C_MODE;
   bme280.settings.I2CAddress = I2C_BME280; // can be 0x77
-
   bme280.settings.runMode = 3; // normal mode
   bme280.settings.tStandby = 0; // 0.5ms
   bme280.settings.filter = 0; // filter off
@@ -117,6 +127,15 @@ void setup() {
   bmp280.begin(I2C_BMP280);
   bmp280.readPressure();
   bmp280.readTemperature();
+#endif
+
+#ifdef SENSOR_TYPE_BMP388
+  bmp388.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
+  bmp388.setPressureOversampling(BMP3_OVERSAMPLING_4X);
+  bmp388.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
+  delay(10); // safe sensor init
+  bmp388.begin(I2C_BMP388);
+  bmp388.performReading();
 #endif
 
   delay(500);
@@ -317,6 +336,12 @@ void printBPacket() {
     humidity = round(bme280.readFloatHumidity());
     P = bme280.readFloatPressure(); // Pa
     bme280.writeRegister(BME280_CTRL_MEAS_REG, 0x00); 
+#endif
+
+#ifdef SENSOR_TYPE_BMP388
+    bmp388.performReading();
+    T = bmp388.temperature;
+    P = bmp388.pressure;
 #endif
 
 #ifdef SENSOR_TYPE_EMULATED
@@ -529,4 +554,3 @@ void blinkLed(byte pin, int blinkDelay)
   delay(blinkDelay);
   digitalWrite(pin, LOW);
 }
-
