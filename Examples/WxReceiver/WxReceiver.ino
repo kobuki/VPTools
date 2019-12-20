@@ -47,7 +47,7 @@
 #include <Adafruit_BMP3XX.h>
 #endif
 
-#define NAME_VERSION F("WxReceiver v2018021601")
+#define NAME_VERSION F("WxReceiver v2019122001")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
