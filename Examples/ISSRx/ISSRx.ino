@@ -14,17 +14,15 @@
 DavisRFM69 radio;
 
 // id, type, active
-Station stations[3] = {
-  { 0, STYPE_ISS,         true },
-  { 1, STYPE_WLESS_ANEMO, true },
-  { 2, STYPE_TEMP_ONLY,   true },
+Station stations[1] = {
+  { 7, STYPE_ISS,         true }
 };
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  radio.setStations(stations, 2);
+  radio.setStations(stations, 1);
   radio.initialize(FREQ_BAND_EU);
-  radio.setBandwidth(RF69_DAVIS_BW_NARROW);
+  radio.setBandwidth(RF69_DAVIS_BW_WIDE);
   radio.setRssiThreshold(-95);
 }
 

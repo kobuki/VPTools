@@ -16,9 +16,9 @@
 
 // Uncomment ONLY ONE of the following chip support lines
 //#define SENSOR_TYPE_BMP180
-#define SENSOR_TYPE_BMP280
+//#define SENSOR_TYPE_BMP280
 //#define SENSOR_TYPE_BME280
-//#define SENSOR_TYPE_BMP388
+#define SENSOR_TYPE_BMP388
 
 // change this according to your setup/devboard
 #define I2C_BME280 0x76
@@ -158,7 +158,7 @@ void startReceiver() {
   radio.initialize(cfgBand);
   radio.setStations(stations, cfgNumStations);
   radio.setRssiThresholdRaw(cfgRfSensitivity);
-  radio.setBandwidth(RF69_DAVIS_BW_NARROW);
+  radio.setBandwidth(RF69_DAVIS_BW_WIDE);
   running = true;
 }
 
