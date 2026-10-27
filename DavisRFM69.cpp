@@ -78,7 +78,8 @@ void DavisRFM69::initialize(byte freqBand)
     /* 0x19 */ { REG_RXBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_4 }, // Use 25 kHz BW (BitRate < 2 * RxBw)
     /* 0x1A */ { REG_AFCBW, RF_RXBW_DCCFREQ_010 | RF_RXBW_MANT_20 | RF_RXBW_EXP_3 }, // Use double the bandwidth during AFC as reception
     /* 0x1B - 0x1D These registers are for OOK.  Not used */
-    /* 0x1E */ { REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_ON },
+    // No auto AFC: when RSSI triggers on the flat carrier around Davis packets, AFC locks one deviation off and the packet is lost
+    /* 0x1E */ { REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_OFF },
     /* 0x1F & 0x20 AFC MSB and LSB values, respectively */
     /* 0x21 & 0x22 FEI MSB and LSB values, respectively */
     /* 0x23 & 0x24 RSSI MSB and LSB values, respectively */
@@ -174,8 +175,10 @@ void DavisRFM69::handleTimerInt() {
   }
 
   if (t - lastDiscStep > DISCOVERY_STEP) {
+    bool parked = stationsFound < numStations && CHANNEL == discChannel;
     discChannel = selfPointer->nextChannel(discChannel);
     lastDiscStep = t;
+    if (parked) selfPointer->setChannel(discChannel);  // actually move the receiver to the new discovery channel
   }
 
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
@@ -326,9 +329,10 @@ void DavisRFM69::interruptHandler() {
     select();   // Select RFM69 module, disabling interrupts
     SPI.transfer(REG_FIFO & 0x7f);
     for (byte i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(SPI.transfer(0));
+    unselect();  // Unselect RFM69 module, enabling interrupts
+    // must run after unselect(): with CS still low, its first register write (FRFMSB) is swallowed by the FIFO burst
     _packetReceived = true;
     handleRadioInt();
-    unselect();  // Unselect RFM69 module, enabling interrupts
   }
 }
 
@@ -462,6 +466,8 @@ void DavisRFM69::setChannel(byte channel)
   writeReg(REG_FRFLSB, c);
 
   if (!txMode) {
+    // in RX the new frequency and a fresh AGC only take effect after leaving RX, so cycle through FS
+    if (_mode == RF69_MODE_RX) setMode(RF69_MODE_SYNTH);
     receiveBegin();
     setRssiThresholdRaw(rxRssi);
   }
