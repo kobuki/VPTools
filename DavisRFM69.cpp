@@ -33,7 +33,7 @@ volatile uint32_t DavisRFM69::txDelay = 0;
 volatile uint32_t DavisRFM69::realTxDelay = 0;
 volatile byte DavisRFM69::txId = 255;
 volatile byte DavisRFM69::txChannel = 255;
-volatile byte DavisRFM69::rxRssi = 160; // -80 dB
+volatile byte DavisRFM69::rxRssi = 190; // -95 dBm, same as REG_RSSITHRESH in the init table
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -557,7 +557,7 @@ void DavisRFM69::setRssiThreshold(int rssiThreshold) {
 }
 
 void DavisRFM69::setRssiThresholdRaw(int rssiThresholdRaw) {
-  writeReg(REG_RSSIVALUE, rssiThresholdRaw);
+  writeReg(REG_RSSITHRESH, rssiThresholdRaw);
   rxRssi = rssiThresholdRaw;
 }
 
