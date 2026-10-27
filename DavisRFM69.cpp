@@ -324,7 +324,8 @@ void DavisRFM69::interruptHandler() {
   RSSI = readRSSI();  // Read up front when it is most likely the carrier is still up
   if (_mode == RF69_MODE_RX && (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY))
   {
-    FEI = word(readReg(REG_FEIMSB), readReg(REG_FEILSB));
+    // FEI is only measured by auto AFC; without it the registers are stale, so report 0 as a placeholder
+    FEI = (readReg(REG_AFCFEI) & RF_AFCFEI_AFCAUTO_ON) ? word(readReg(REG_FEIMSB), readReg(REG_FEILSB)) : 0;
     setMode(RF69_MODE_STANDBY);
     select();   // Select RFM69 module, disabling interrupts
     SPI.transfer(REG_FIFO & 0x7f);
