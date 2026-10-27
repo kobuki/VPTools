@@ -315,13 +315,15 @@ static const __attribute__((progmem)) FRF_ITEM FRF_AU[FREQ_TABLE_LENGTH_AU] =
    {0xE6, 0x39, 0x58}
 };
 
+// EU table measured from two Davis EU transmitters with a 2 ppm TCXO RTL-SDR (2026-10): channel spacing is
+// ~120.2 kHz, not 115.2 kHz, so the old values were off by -6..+14 kHz and only worked with auto AFC
 static const __attribute__((progmem)) FRF_ITEM FRF_EU[FREQ_TABLE_LENGTH_EU] =
 {
-  {0xD9, 0x04, 0x45},
-  {0xD9, 0x13, 0x04},
-  {0xD9, 0x21, 0xC2},
-  {0xD9, 0x0B, 0xA4},
-  {0xD9, 0x1A, 0x63}
+  {0xD9, 0x03, 0xE1},  // 868.0606 MHz
+  {0xD9, 0x13, 0x44},  // 868.3010
+  {0xD9, 0x22, 0xA5},  // 868.5413
+  {0xD9, 0x0B, 0x94},  // 868.1809
+  {0xD9, 0x1A, 0xF6}   // 868.4213
 };
 
 static const __attribute__((progmem)) FRF_ITEM FRF_NZ[FREQ_TABLE_LENGTH_NZ] =
