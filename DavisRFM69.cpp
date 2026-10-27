@@ -124,9 +124,9 @@ void DavisRFM69::initialize(byte freqBand)
   setHighPower(_isRFM69HW); // called regardless if it's a RFM69W or RFM69HW
   setMode(RF69_MODE_STANDBY);
   while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00); // Wait for ModeReady
-  attachInterrupt(_interruptNum, DavisRFM69::isr0, RISING);
-
+  // isr0() goes through selfPointer, and a DIO0 edge left pending by the still running radio fires right away
   selfPointer = this;
+  attachInterrupt(_interruptNum, DavisRFM69::isr0, RISING);
 
   setBand(freqBand);
   setChannel(discChannel);
