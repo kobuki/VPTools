@@ -39,6 +39,10 @@ volatile int16_t DavisRFM69::afcApplied = 0;  // software AFC correction the rec
 volatile int16_t DavisRFM69::afcLast = 0;     // last learned correction of any station, used for discovery
 volatile uint32_t DavisRFM69::rssiTime = 0;   // software AFC: when RSSI triggered
 volatile bool DavisRFM69::feiWait = false;    // software AFC: inside the wait for the preamble
+volatile bool DavisRFM69::feiPending = false; // software AFC: FEI started, payload not yet received
+volatile byte DavisRFM69::feiRssi = 0;        // software AFC: raw RSSI on the preamble at FEI start
+volatile int16_t DavisRFM69::discCand = 0;    // software AFC: weak discovery reading waiting for a second one
+volatile bool DavisRFM69::discCandValid = false;
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -165,6 +169,7 @@ void DavisRFM69::resetAfc() {
     stations[i].afcSamples = 0;
   }
   afcLast = 0;
+  discCandValid = false;
 }
 
 void DavisRFM69::handleTxInt() {
@@ -183,6 +188,11 @@ void DavisRFM69::handleTimerInt() {
 
   uint32_t t = micros();
   bool readjust = false;
+
+  if (feiPending && t - rssiTime > AFC_PKT_MAX) {
+    feiPending = false;
+    selfPointer->discoveryFei();
+  }
 
   if (stations[curStation].interval > 0
       && stations[curStation].lastRx + stations[curStation].interval - t < DISCOVERY_GUARD
@@ -297,6 +307,29 @@ void DavisRFM69::handleRadioInt() {
   }
 }
 
+// Software AFC: RSSI triggered, but no payload followed. While discovering, that is most likely a packet lost to
+// the very offset AFC is there to correct, so take the FEI measured on its preamble as the discovery correction.
+void DavisRFM69::discoveryFei() {
+  if (stationsFound >= numStations || CHANNEL != discChannel) return;  // tracking: the next hop rearms RSSI
+  if (readReg(REG_AFCFEI) & RF_AFCFEI_FEI_DONE) {
+    int32_t offset = (int32_t)afcApplied + (int16_t)word(readReg(REG_FEIMSB), readReg(REG_FEILSB));
+    int32_t limit = afcMode * 1000L / RF69_FSTEP;
+    if (offset >= -limit && offset <= limit) {
+      if (feiRssi + AFC_DISC_MARGIN <= rxRssi) {
+        afcLast = offset;
+        discCandValid = false;
+      } else if (discCandValid && abs(offset - discCand) <= AFC_DISC_AGREE) {
+        afcLast = (offset + discCand) / 2;
+        discCandValid = false;
+      } else {
+        discCand = offset;
+        discCandValid = true;
+      }
+    }
+  }
+  setChannel(CHANNEL);  // rearm RSSI on the discovery channel, retuned if the correction changed
+}
+
 // Software AFC: FEI was measured on the packet's preamble, relative to the receiver tuned with afcApplied.
 // Average it into the station's correction and limit that.
 void DavisRFM69::updateAfc(Station *s) {
@@ -375,11 +408,14 @@ void DavisRFM69::interruptHandler() {
       writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01);
       delayMicroseconds(AFC_FEI_DELAY);
       writeReg(REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_OFF | RF_AFCFEI_FEI_START);
+      feiRssi = readReg(REG_RSSIVALUE);
+      feiPending = true;
       feiWait = false;
     }
     return;
   }
 
+  feiPending = false;  // the payload came, so no discovery reading from the timer
   if (afcMode == RF69_AFC_HW) {
     FEI = word(readReg(REG_FEIMSB), readReg(REG_FEILSB));  // measured by the auto AFC
   } else if (afcMode == RF69_AFC_OFF) {
@@ -612,6 +648,7 @@ void DavisRFM69::isr0() { selfPointer->interruptHandler(); }
 
 void DavisRFM69::receiveBegin() {
   _packetReceived = false;
+  feiPending = false;
   if (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)
     writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
 

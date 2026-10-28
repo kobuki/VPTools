@@ -59,6 +59,11 @@
 #define AFC_PKT_MIN           5000L     // RSSI trigger to PayloadReady when RSSI triggered on the packet's own carrier
 #define AFC_PKT_MAX           8000L     // (7.45 ms nominal, but micros() loses up to ~1 ms around the FEI wait)
 #define AFC_MAX_STEP          ((int16_t)(2000 / RF69_FSTEP))  // limit of a single FEI sample's pull once converged
+// While discovering, an RSSI trigger without payload still measures the offset on the preamble (the packet itself
+// was likely lost to that offset). Readings this much stronger than the RSSI threshold (raw, 0.5 dB units) are used
+// right away, weaker ones only if two agree, so noise triggers don't detune the receiver.
+#define AFC_DISC_MARGIN       16
+#define AFC_DISC_AGREE        ((int16_t)(1500 / RF69_FSTEP))
 
 #define null                  0
 #define COURSE_TEMP_COEF    -90     // puts the temperature reading in the ballpark, user can fine tune the returned value
@@ -126,6 +131,10 @@ class DavisRFM69 {
     static volatile int16_t afcLast;
     static volatile uint32_t rssiTime;
     static volatile bool feiWait;
+    static volatile bool feiPending;
+    static volatile byte feiRssi;
+    static volatile int16_t discCand;
+    static volatile bool discCandValid;
     static volatile bool repeaterPT;
 
     static PacketFifo fifo;
@@ -204,6 +213,7 @@ class DavisRFM69 {
 
     void receiveBegin();
     void updateAfc(Station *s);
+    void discoveryFei();
     static bool swAfc() { return afcMode != RF69_AFC_OFF && afcMode != RF69_AFC_HW; }
     void setMode(byte mode);
     void setHighPowerRegs(bool onOff);
