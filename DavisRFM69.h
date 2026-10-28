@@ -47,6 +47,19 @@
 #define RF69_DAVIS_BW_NARROW  1
 #define RF69_DAVIS_BW_WIDE    2
 
+#define RF69_AFC_OFF          0     // fixed frequency table, no AFC
+                                    // 1..RF69_AFC_MAX: software AFC, per station correction limited to +/- that many kHz
+#define RF69_AFC_MAX          50
+#define RF69_AFC_HW           255   // RFM69 auto AFC, can lock onto the flat carrier around Davis packets
+#define RF69_FEI_INVALID      ((int16_t)0x8000)
+
+// Davis packets start with ~18 bits of flat carrier on the '1' tone, then 32 bits preamble, 16 bits sync, 80 bits data.
+// RSSI triggers early on the carrier, where FEI reads 0; FEI started 0.7-1.1 ms later reads the true offset.
+#define AFC_FEI_DELAY         900       // RSSI trigger to FEI start (micros)
+#define AFC_PKT_MIN           5000L     // RSSI trigger to PayloadReady when RSSI triggered on the packet's own carrier
+#define AFC_PKT_MAX           8000L     // (7.45 ms nominal, but micros() loses up to ~1 ms around the FEI wait)
+#define AFC_MAX_STEP          ((int16_t)(2000 / RF69_FSTEP))  // limit of a single FEI sample's pull once converged
+
 #define null                  0
 #define COURSE_TEMP_COEF    -90     // puts the temperature reading in the ballpark, user can fine tune the returned value
 #define RF69_FSTEP 61.03515625      // FXOSC/2^19 (see datasheet)
@@ -77,6 +90,8 @@ typedef struct __attribute__((packed)) Station {
   uint32_t packets;         // total number of received packets after (re)restart
   uint32_t missedPackets;   // total number of misssed packets after (re)restart
   byte lostPackets;         // missed packets since a packet was last seen from this station
+  int16_t afcCorr;          // software AFC: learned frequency correction in FSTEP units
+  byte afcSamples;          // software AFC: number of FEI samples behind afcCorr (saturates)
 };
 
 class DavisRFM69 {
@@ -106,6 +121,11 @@ class DavisRFM69 {
     static volatile byte txId;
     static volatile byte txChannel;
     static volatile byte rxRssi;
+    static volatile byte afcMode;
+    static volatile int16_t afcApplied;
+    static volatile int16_t afcLast;
+    static volatile uint32_t rssiTime;
+    static volatile bool feiWait;
     static volatile bool repeaterPT;
 
     static PacketFifo fifo;
@@ -154,10 +174,12 @@ class DavisRFM69 {
     static void handleTimerInt();
     static void handleTxInt();
     static void setStations(Station *_stations, byte n);
+    static void resetAfc();
     void stopReceiver();
     void setRssiThreshold(int rssiThreshold);
     void setRssiThresholdRaw(int rssiThresholdRaw);
     void setFreqCorr(int16_t value);
+    void setAfc(byte mode);
     void setTimeBase(uint32_t value);
     void setRepeaterPT(bool value = false);
     void enableTx(void (*function)(byte* buffer), byte ID);
@@ -181,6 +203,8 @@ class DavisRFM69 {
     bool _isRFM69HW;
 
     void receiveBegin();
+    void updateAfc(Station *s);
+    static bool swAfc() { return afcMode != RF69_AFC_OFF && afcMode != RF69_AFC_HW; }
     void setMode(byte mode);
     void setHighPowerRegs(bool onOff);
     void setTxMode(bool mode);

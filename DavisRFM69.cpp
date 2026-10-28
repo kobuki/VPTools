@@ -34,6 +34,11 @@ volatile uint32_t DavisRFM69::realTxDelay = 0;
 volatile byte DavisRFM69::txId = 255;
 volatile byte DavisRFM69::txChannel = 255;
 volatile byte DavisRFM69::rxRssi = 190; // -95 dBm, same as REG_RSSITHRESH in the init table
+volatile byte DavisRFM69::afcMode = RF69_AFC_OFF;
+volatile int16_t DavisRFM69::afcApplied = 0;  // software AFC correction the receiver is currently tuned with
+volatile int16_t DavisRFM69::afcLast = 0;     // last learned correction of any station, used for discovery
+volatile uint32_t DavisRFM69::rssiTime = 0;   // software AFC: when RSSI triggered
+volatile bool DavisRFM69::feiWait = false;    // software AFC: inside the wait for the preamble
 
 volatile uint32_t DavisRFM69::packets = 0;
 volatile uint32_t DavisRFM69::lostPackets = 0;
@@ -120,6 +125,7 @@ void DavisRFM69::initialize(byte freqBand)
 
   for (byte i = 0; CONFIG[i][0] != 255; i++)
     writeReg(CONFIG[i][0], CONFIG[i][1]);
+  setAfc(afcMode);
 
   setHighPower(_isRFM69HW); // called regardless if it's a RFM69W or RFM69HW
   setMode(RF69_MODE_STANDBY);
@@ -133,6 +139,7 @@ void DavisRFM69::initialize(byte freqBand)
 
   fifo.flush();
   initStations();
+  resetAfc();
   lastDiscStep = micros();
 
   MsTimer2::set(1, DavisRFM69::handleTimerInt);
@@ -148,6 +155,16 @@ void DavisRFM69::stopReceiver() {
 void DavisRFM69::setStations(Station *_stations, byte n) {
   stations = _stations;
   numStations = n;
+  resetAfc();
+}
+
+// AFC corrections survive resyncs (the crystal drift is still there), but not a restart or a new station set
+void DavisRFM69::resetAfc() {
+  for (byte i = 0; i < numStations; i++) {
+    stations[i].afcCorr = 0;
+    stations[i].afcSamples = 0;
+  }
+  afcLast = 0;
 }
 
 void DavisRFM69::handleTxInt() {
@@ -255,6 +272,8 @@ void DavisRFM69::handleRadioInt() {
       if (lostStations > 0) lostStations--;
     }
 
+    if (swAfc()) updateAfc(&stations[stIx]);
+
     if (stations[stIx].active) {
       packets++;
       stations[stIx].packets++;
@@ -276,6 +295,28 @@ void DavisRFM69::handleRadioInt() {
   } else {
     setChannel(CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
   }
+}
+
+// Software AFC: FEI was measured on the packet's preamble, relative to the receiver tuned with afcApplied.
+// Average it into the station's correction and limit that.
+void DavisRFM69::updateAfc(Station *s) {
+  if (FEI == RF69_FEI_INVALID) {  // no usable measurement: keep the correction, report the one in use
+    FEI = afcApplied;
+    return;
+  }
+  int32_t offset = (int32_t)afcApplied + FEI;
+  int32_t diff = offset - s->afcCorr;
+  int32_t corr;
+  if (s->afcSamples < 4) {
+    corr = s->afcCorr + diff / 2;  // converge fast at first
+  } else {
+    corr = s->afcCorr + constrain(diff, -AFC_MAX_STEP, AFC_MAX_STEP) / 8;  // then track slowly, ignoring outliers
+  }
+  int32_t limit = afcMode * 1000L / RF69_FSTEP;
+  s->afcCorr = constrain(corr, -limit, limit);
+  if (s->afcSamples < 255) s->afcSamples++;
+  afcLast = s->afcCorr;
+  FEI = offset;  // report the transmitter's offset from the frequency table
 }
 
 // Calculate the next hop of the specified channel
@@ -322,19 +363,41 @@ void DavisRFM69::interruptHandler() {
   if (txMode) return;
 
   RSSI = readRSSI();  // Read up front when it is most likely the carrier is still up
-  if (_mode == RF69_MODE_RX && (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY))
-  {
-    // FEI is only measured by auto AFC; without it the registers are stale, so report 0 as a placeholder
-    FEI = (readReg(REG_AFCFEI) & RF_AFCFEI_AFCAUTO_ON) ? word(readReg(REG_FEIMSB), readReg(REG_FEILSB)) : 0;
-    setMode(RF69_MODE_STANDBY);
-    select();   // Select RFM69 module, disabling interrupts
-    SPI.transfer(REG_FIFO & 0x7f);
-    for (byte i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(SPI.transfer(0));
-    unselect();  // Unselect RFM69 module, enabling interrupts
-    // must run after unselect(): with CS still low, its first register write (FRFMSB) is swallowed by the FIFO burst
-    _packetReceived = true;
-    handleRadioInt();
+  if (_mode != RF69_MODE_RX) return;
+
+  if (!(readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)) {
+    if (swAfc() && !feiWait && (readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_RSSI)) {
+      // software AFC: DIO0 was mapped to Rssi, which triggers on the flat carrier leading every Davis packet.
+      // FEI only works on the preamble that follows, so wait for it, then wait for the payload.
+      // SPI access re-enables interrupts, feiWait guards against reentry if the timer ISR retunes meanwhile.
+      rssiTime = micros();
+      feiWait = true;
+      writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01);
+      delayMicroseconds(AFC_FEI_DELAY);
+      writeReg(REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | RF_AFCFEI_AFCAUTO_OFF | RF_AFCFEI_FEI_START);
+      feiWait = false;
+    }
+    return;
   }
+
+  if (afcMode == RF69_AFC_HW) {
+    FEI = word(readReg(REG_FEIMSB), readReg(REG_FEILSB));  // measured by the auto AFC
+  } else if (afcMode == RF69_AFC_OFF) {
+    FEI = 0;  // never measured, report 0 as a placeholder
+  } else {
+    // valid only if RSSI triggered on this packet's leading carrier, ie. the payload followed in packet time
+    uint32_t dt = micros() - rssiTime;
+    bool valid = dt >= AFC_PKT_MIN && dt <= AFC_PKT_MAX && (readReg(REG_AFCFEI) & RF_AFCFEI_FEI_DONE);
+    FEI = valid ? word(readReg(REG_FEIMSB), readReg(REG_FEILSB)) : RF69_FEI_INVALID;
+  }
+  setMode(RF69_MODE_STANDBY);
+  select();   // Select RFM69 module, disabling interrupts
+  SPI.transfer(REG_FIFO & 0x7f);
+  for (byte i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(SPI.transfer(0));
+  unselect();  // Unselect RFM69 module, enabling interrupts
+  // must run after unselect(): with CS still low, its first register write (FRFMSB) is swallowed by the FIFO burst
+  _packetReceived = true;
+  handleRadioInt();
 }
 
 bool DavisRFM69::canSend()
@@ -454,9 +517,16 @@ void DavisRFM69::setChannel(byte channel)
   byte b = pgm_read_byte(&bandTab[band][CHANNEL][1]);
   byte c = pgm_read_byte(&bandTab[band][CHANNEL][2]);
 
-  if (freqCorr != 0) {
+  // software AFC: the expected station's correction, or the last learned one while discovering
+  afcApplied = 0;
+  if (!txMode && stations != NULL && swAfc()) {
+    Station *s = &stations[curStation];
+    afcApplied = (s->interval > 0 && channel == s->channel && s->afcSamples > 0) ? s->afcCorr : afcLast;
+  }
+
+  if (freqCorr != 0 || afcApplied != 0) {
     uint32_t x = ((uint32_t)a<<16) | ((uint32_t)b<<8) | (uint32_t)c;
-    x += freqCorr;
+    x += freqCorr + afcApplied;
     c =  x & 0x0000ff;
     b = (x & 0x00ff00) >> 8;
     a = (x & 0xff0000) >> 16;
@@ -545,7 +615,8 @@ void DavisRFM69::receiveBegin() {
   if (readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PAYLOADREADY)
     writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
 
-  writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_01); // set DIO0 to "PAYLOADREADY" in receive mode
+  // DIO0 is "PAYLOADREADY" in receive mode, or "RSSI" first for software AFC to time its FEI measurement
+  writeReg(REG_DIOMAPPING1, swAfc() ? RF_DIOMAPPING1_DIO0_11 : RF_DIOMAPPING1_DIO0_01);
   setMode(RF69_MODE_RX);
 }
 
@@ -690,6 +761,14 @@ byte DavisRFM69::getBandTabLength()
 void DavisRFM69::setFreqCorr(int value)
 {
   freqCorr = value * 1000.0 / RF69_FSTEP;
+}
+
+// RF69_AFC_OFF, RF69_AFC_HW, or software AFC limited to +/- mode kHz (1..RF69_AFC_MAX)
+void DavisRFM69::setAfc(byte mode)
+{
+  if (mode > RF69_AFC_MAX && mode != RF69_AFC_HW) return;
+  afcMode = mode;
+  writeReg(REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON | (mode == RF69_AFC_HW ? RF_AFCFEI_AFCAUTO_ON : RF_AFCFEI_AFCAUTO_OFF));
 }
 
 void DavisRFM69::enableTx(void (*function)(byte* buffer), byte ID)

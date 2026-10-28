@@ -90,6 +90,7 @@ byte cfgBand = FREQ_BAND_EU;
 byte cfgRfSensitivity = 190;
 byte cfgOutput = 0;
 byte cfgRepeaterPT = 0;
+byte cfgAfc = 12;  // software AFC limited to +/- 12 kHz, see DavisRFM69::setAfc()
 
 // id, type, active
 Station stations[8] = {
@@ -159,6 +160,7 @@ void startReceiver() {
   radio.setStations(stations, cfgNumStations);
   radio.setRssiThresholdRaw(cfgRfSensitivity);
   radio.setBandwidth(RF69_DAVIS_BW_WIDE);
+  radio.setAfc(cfgAfc);
   running = true;
 }
 
@@ -250,6 +252,10 @@ void processSerial()
 
         case 'x':
           cmdRFSensitivity(s + 1);
+          break;
+
+        case 'a':
+          cmdAfc(s + 1);
           break;
 
         case '?':
@@ -488,6 +494,30 @@ void cmdRFSensitivity(char *s)
   }
 }
 
+// a0: off, a1..a50: software AFC limited to +/- that many kHz, ah: RFM69 auto AFC
+void cmdAfc(char *s)
+{
+  int afc = s[0] == 'h' ? RF69_AFC_HW : atoi(s);
+  if ((s[0] == 'h' || isdigit(s[0])) && (afc <= RF69_AFC_MAX || afc == RF69_AFC_HW)) {
+    cfgAfc = afc;
+    if (running) radio.setAfc(afc);  // otherwise applied by startReceiver(), the radio isn't initialized yet
+    Serial.print(F("# OK afc "));
+    printAfc();
+    Serial.println();
+  } else {
+    printStatusF(S_ERR);
+  }
+}
+
+void printAfc()
+{
+  if (cfgAfc == RF69_AFC_HW) {
+    Serial.print('h');
+  } else {
+    Serial.print(cfgAfc);
+  }
+}
+
 void cmdShowDefaults()
 {
   Serial.print(F("# OK "));
@@ -501,6 +531,8 @@ void cmdShowDefaults()
   Serial.print(cfgRfSensitivity);
   Serial.print(F(" r"));
   Serial.print(cfgRepeaterPT);
+  Serial.print(F(" a"));
+  printAfc();
   Serial.println(running ? F(" running") : F(" stopped"));
 }
 
