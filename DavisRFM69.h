@@ -61,8 +61,10 @@
 #define AFC_MAX_STEP          ((int16_t)(2000 / RF69_FSTEP))  // limit of a single FEI sample's pull once converged
 // While discovering, an RSSI trigger without payload still measures the offset on the preamble (the packet itself
 // was likely lost to that offset). Readings this much stronger than the RSSI threshold (raw, 0.5 dB units) are used
-// right away, weaker ones only if two agree, so noise triggers don't detune the receiver.
+// right away, weaker ones only if two agree, so noise triggers don't detune the receiver. Readings below the weak
+// margin are ignored: noise triggers sit right at the threshold and agree by chance often enough to matter.
 #define AFC_DISC_MARGIN       16
+#define AFC_DISC_WEAK         6
 #define AFC_DISC_AGREE        ((int16_t)(1500 / RF69_FSTEP))
 
 #define null                  0

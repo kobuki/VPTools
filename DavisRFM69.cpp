@@ -318,6 +318,8 @@ void DavisRFM69::discoveryFei() {
       if (feiRssi + AFC_DISC_MARGIN <= rxRssi) {
         afcLast = offset;
         discCandValid = false;
+      } else if (feiRssi + AFC_DISC_WEAK > rxRssi) {
+        // too close to the threshold to tell from noise
       } else if (discCandValid && abs(offset - discCand) <= AFC_DISC_AGREE) {
         afcLast = (offset + discCand) / 2;
         discCandValid = false;
@@ -340,7 +342,9 @@ void DavisRFM69::updateAfc(Station *s) {
   int32_t offset = (int32_t)afcApplied + FEI;
   int32_t diff = offset - s->afcCorr;
   int32_t corr;
-  if (s->afcSamples < 4) {
+  if (s->afcSamples == 0) {
+    corr = offset - FEI / 2;  // the first packet came through at afcApplied: start there, not at 0, half way to the reading
+  } else if (s->afcSamples < 4) {
     corr = s->afcCorr + diff / 2;  // converge fast at first
   } else {
     corr = s->afcCorr + constrain(diff, -AFC_MAX_STEP, AFC_MAX_STEP) / 8;  // then track slowly, ignoring outliers
