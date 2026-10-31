@@ -202,7 +202,8 @@ void DavisRFM69::handleTimerInt() {
   }
 
   if (t - lastDiscStep > DISCOVERY_STEP) {
-    bool parked = stationsFound < numStations && CHANNEL == discChannel;
+    // with no station tracked there is nothing else to listen to: always (re)tune, which also rearms a stuck receiver
+    bool parked = stationsFound < numStations && (CHANNEL == discChannel || stationsFound == 0);
     discChannel = selfPointer->nextChannel(discChannel);
     lastDiscStep = t;
     if (parked) selfPointer->setChannel(discChannel);  // actually move the receiver to the new discovery channel
@@ -211,7 +212,15 @@ void DavisRFM69::handleTimerInt() {
   // find and adjust 'last seen' rx time on all stations with older reception timestamp than their period + threshold
   // that is, find missed packets
   for (byte i = 0; i < numStations; i++) {
-    if (stations[i].interval > 0 && (t - stations[i].lastRx) > stations[i].interval + LATE_PACKET_THRESH) {
+    if (stations[i].interval == 0) continue;
+    // signed: a lastRx ahead of t means not due yet. As unsigned it wrapped to a huge lateness, and since every
+    // miss pushes lastRx another interval ahead, that counted a miss on each 1 ms tick until the station was dropped
+    int32_t late = (int32_t)(t - stations[i].lastRx) - (int32_t)stations[i].interval;
+    if (late < -(int32_t)stations[i].interval) {
+      stations[i].lastRx = t;  // more than an interval ahead can't be right: re-anchor, normal miss counting follows
+      continue;
+    }
+    if (late > LATE_PACKET_THRESH) {
       if (stations[curStation].active) lostPackets++;
       stations[i].lostPackets++;
       stations[i].missedPackets++;
@@ -220,8 +229,8 @@ void DavisRFM69::handleTimerInt() {
         stations[i].interval = 0;
         stations[i].lostPackets = 0;
         lostStations++;
-        stationsFound--;
-        if (lostStations == numStations) {
+        if (stationsFound > 0) stationsFound--;
+        if (stationsFound == 0) {
           numResyncs++;
           stationsFound = 0;
           lostStations = 0;
@@ -276,9 +285,12 @@ void DavisRFM69::handleRadioInt() {
       return;
     }
 
-    if (stationsFound < numStations && stations[stIx].interval == 0) {
+    // The SPI access above re-enabled interrupts, so the 1 ms timer ISR can run in the middle of this. Update the
+    // station's state atomically: a 32-bit lastRx half written when the timer reads it can lie ahead of its clock.
+    noInterrupts();
+    if (stations[stIx].interval == 0) {
       stations[stIx].interval = (41 + id) * timeBase / 16; // Davis' official tx interval in us
-      stationsFound++;
+      if (stationsFound < numStations) stationsFound++;
       if (lostStations > 0) lostStations--;
     }
 
@@ -295,6 +307,7 @@ void DavisRFM69::handleRadioInt() {
     stations[stIx].channel = nextChannel(CHANNEL);
 
     nextStation(); // skip curStation to next station expected to tx
+    interrupts();
 
     if (stationsFound < numStations && stations[curStation].lastRx + stations[curStation].interval - lastRx > DISCOVERY_MINGAP) {
       setChannel(discChannel);
