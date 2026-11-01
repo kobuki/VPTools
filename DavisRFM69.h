@@ -73,6 +73,8 @@
 
 #define RESYNC_THRESHOLD 50         // max. number of lost packets from a station before rediscovery
 #define LATE_PACKET_THRESH 5000L    // packet is considered missing after this delay (micros)
+#define EARLY_PACKET_THRESH 20000L  // a tracked station's packet this much early, per interval since it was last seen, is foreign (micros)
+#define TRAILER_MAX_ZERO_BITS 2     // a non-repeater packet's 0xFF 0xFF trailer may have this many bit errors
 #define POST_RX_WAIT 2000L          // RX "settle" delay
 #define MAX_STATIONS 8              // max. stations this code is able to handle
 
@@ -87,8 +89,6 @@ typedef struct __attribute__((packed)) Station {
                             // set it ONE LESS than advertised station id, eg. 0 for station 1 (default) etc.
   byte type;                // STYPE_XXX station type, eg. ISS, standalone anemometer transmitter, etc.
   bool active;              // true when the station is actively listened to but ignored
-  byte repeaterId;          // repeater id when packet is coming via a repeater, otherwise 0
-                            // repeater IDs A..H are stored as 0x8..0xf here
   byte channel;             // rx channel the next packet of the station is expected on
   uint32_t lastRx;          // last time a packet is seen or should have been seen when missed
   uint32_t lastSeen;        // last factual reception time

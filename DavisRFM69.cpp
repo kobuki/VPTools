@@ -275,14 +275,33 @@ void DavisRFM69::handleRadioInt() {
     byte id = DATA[0] & 7;
     int stIx = findStation(id);
 
-    // if we have no station cofigured for this id (at all; can still be be !active), ignore the packet
-    // OR packet passed the repeater crc check, but no repeater is set for the station
-    // OR packet passed the normal crc check, and repeater is set for the station
-    if (stIx < 0
-        || (!repeaterPT && repeaterCrcTried && stations[stIx].repeaterId == 0)
-        || (!repeaterPT && !repeaterCrcTried && stations[stIx].repeaterId != 0)) {
+    // ignore the packet if we have no station configured for this id (at all; it can still be !active),
+    // OR it passed only the repeater crc check without repeater pass-through (repeaters are not supported otherwise)
+    if (stIx < 0 || (!repeaterPT && repeaterCrcTried)) {
       setChannel(CHANNEL);
       return;
+    }
+
+    // foreign packets passing the CRC by chance would re-anchor a station's timing: check the FF FF trailer and arrival time
+    if (!repeaterCrcTried) {
+      byte zeros = 0;
+      for (byte b = 8; b < 10; b++) for (byte m = 1; m; m <<= 1) if (!(DATA[b] & m)) zeros++;
+      if (zeros > TRAILER_MAX_ZERO_BITS) {
+        setChannel(CHANNEL);
+        return;
+      }
+    }
+    noInterrupts();  // the timer ISR moves lastRx on, see below
+    uint32_t expected = stations[stIx].lastRx + stations[stIx].interval;
+    uint32_t interval = stations[stIx].interval;
+    byte lost = stations[stIx].lostPackets;
+    interrupts();
+    if (interval > 0) {
+      int32_t early = (int32_t)(expected - lastRx);
+      if (early > EARLY_PACKET_THRESH * (lost + 1)) {
+        setChannel(CHANNEL);
+        return;
+      }
     }
 
     // The SPI access above re-enabled interrupts, so the 1 ms timer ISR can run in the middle of this. Update the
