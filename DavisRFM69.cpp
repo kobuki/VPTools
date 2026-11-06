@@ -346,12 +346,13 @@ void DavisRFM69::discoveryFei() {
   if (readReg(REG_AFCFEI) & RF_AFCFEI_FEI_DONE) {
     int32_t offset = (int32_t)afcApplied + (int16_t)word(readReg(REG_FEIMSB), readReg(REG_FEILSB));
     int32_t limit = afcMode * 1000L / RF69_FSTEP;
+    bool follow = true;
     if (offset >= -limit && offset <= limit) {
       if (feiRssi + AFC_DISC_MARGIN <= rxRssi) {
         afcLast = offset;
         discCandValid = false;
       } else if (feiRssi + AFC_DISC_WEAK > rxRssi) {
-        // too close to the threshold to tell from noise
+        follow = false;  // too close to the threshold to tell from noise
       } else if (discCandValid && abs(offset - discCand) <= AFC_DISC_AGREE) {
         afcLast = (offset + discCand) / 2;
         discCandValid = false;
@@ -359,9 +360,16 @@ void DavisRFM69::discoveryFei() {
         discCand = offset;
         discCandValid = true;
       }
+    } else {
+      follow = false;
+    }
+    if (follow) {
+      // the transmitter hops to the next channel: wait there, one interval instead of a whole hop cycle away
+      discChannel = nextChannel(discChannel);
+      lastDiscStep = micros();
     }
   }
-  setChannel(CHANNEL);  // rearm RSSI on the discovery channel, retuned if the correction changed
+  setChannel(discChannel);  // rearm RSSI on the discovery channel, retuned if the correction changed
 }
 
 // Software AFC: FEI was measured on the packet's preamble, relative to the receiver tuned with afcApplied.
