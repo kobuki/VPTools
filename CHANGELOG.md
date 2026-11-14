@@ -2,6 +2,13 @@
 
 The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`). Most changes live in the DavisRFM69 library, which all examples share.
 
+## v2026111401, 2026-11-14 (cb211a9)
+
+- **BMP388 oversampling and IIR filter now take effect.** The sketch set 8x temperature and 4x pressure oversampling and IIR filter coefficient 3 before `begin()`, which resets all three to off, so the sensor always ran without them. They are now set after `begin_I2C()`. Before the fix, pressure readings 30 s apart on one receiver differed by 0.08 hPa rms, and by up to 0.22 hPa.
+- **BMP388 readings are current.** The library's `performReading()` starts a forced conversion but reads the result registers straight away, so each reading returned the conversion started 30 s earlier. The sketch now starts a conversion, waits 40 ms for it and then reads it.
+- **BME280 readings update again.** After each reading the sketch wrote 0 to `ctrl_meas`, which puts the sensor to sleep with measurement disabled, and nothing restarted it, so every reading after the first was the same. This is from the code and not confirmed on hardware. The sketch now takes one forced measurement per reading, and the sensor sleeps in between.
+- **Sensor libraries updated.** Adafruit BMP3XX 2.x is now required. It also supports the BMP390, which 1.x rejects by its chip ID. SparkFun BME280 2.x is now required. It reads the H6 humidity calibration value as signed (1.x read it as unsigned, giving wrong humidity on chips where it is negative) and reads each value in one burst.
+
 ## v2026110601, 2026-11-06 (f21d50d)
 
 - **Faster discovery when the receiver is off frequency.** The software AFC sometimes measures a transmitter's offset on a preamble without getting its packet. When that happens, discovery now moves to the transmitter's *next* hop channel and waits there, one transmit interval away. Before, it stayed put until the transmitter came round again, a whole hop cycle later. On the US band with a receiver about 9 kHz off, acquisition after a restart dropped from 158–258 s to 32–119 s.
