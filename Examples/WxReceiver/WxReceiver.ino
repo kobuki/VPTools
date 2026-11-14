@@ -39,15 +39,17 @@
 #endif
 
 #ifdef SENSOR_TYPE_BME280
-#include <SparkFunBME280.h>
+#include <SparkFunBME280.h> // SparkFun BME280 library 2.x
+#define BME280_MEAS_TIMEOUT 50 // ms, a forced measurement with x1 oversampling takes up to 9.3 ms
 #endif
 
 #ifdef SENSOR_TYPE_BMP388
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BMP3XX.h>
+#include <Adafruit_BMP3XX.h> // Adafruit BMP3XX library 2.x, also supports the BMP390
+#define BMP388_CONV_TIME 40 // ms, a forced conversion with 8x temperature and 4x pressure oversampling takes up to 24 ms
 #endif
 
-#define NAME_VERSION F("WxReceiver v2026110601")
+#define NAME_VERSION F("WxReceiver v2026111401")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -110,18 +112,16 @@ void setup() {
 #endif
 
 #ifdef SENSOR_TYPE_BME280
-  bme280.settings.commInterface = I2C_MODE;
-  bme280.settings.I2CAddress = I2C_BME280; // can be 0x77
-  bme280.settings.runMode = 3; // normal mode
+  Wire.begin();
+  bme280.setI2CAddress(I2C_BME280); // can be 0x77
   bme280.settings.tStandby = 0; // 0.5ms
   bme280.settings.filter = 0; // filter off
   bme280.settings.tempOverSample = 1; // x1
   bme280.settings.pressOverSample = 1; // x1
   bme280.settings.humidOverSample = 1; // x1
   delay(10); // safe sensor init
-  bme280.begin();
-  bme280.readFloatPressure(); // throw away first read
-  bme280.readTempC(); // throw away first read
+  bme280.beginI2C(); // starts in normal mode
+  bme280.setMode(MODE_SLEEP); // one forced measurement per reading, no self-heating in between
 #endif
 
 #ifdef SENSOR_TYPE_BMP280
@@ -131,12 +131,13 @@ void setup() {
 #endif
 
 #ifdef SENSOR_TYPE_BMP388
+  delay(10); // safe sensor init
+  bmp388.begin_I2C(I2C_BMP388);
+  // after begin_I2C(), which resets oversampling and filter to off
   bmp388.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
   bmp388.setPressureOversampling(BMP3_OVERSAMPLING_4X);
   bmp388.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
-  delay(10); // safe sensor init
-  bmp388.begin(I2C_BMP388);
-  bmp388.performReading();
+  bmp388.performReading(); // first conversion
 #endif
 
   delay(500);
@@ -338,13 +339,19 @@ void printBPacket() {
 #endif
 
 #ifdef SENSOR_TYPE_BME280
-    T = bme280.readTempC();
+    bme280.setMode(MODE_FORCED); // returns to sleep after the measurement
+    delay(10);
+    for (byte i = 0; i < BME280_MEAS_TIMEOUT && bme280.isMeasuring(); i++) delay(1);
+    T = bme280.readTempC(); // first, it sets the fine temperature for pressure and humidity
     humidity = round(bme280.readFloatHumidity());
     P = bme280.readFloatPressure(); // Pa
-    bme280.writeRegister(BME280_CTRL_MEAS_REG, 0x00); 
 #endif
 
 #ifdef SENSOR_TYPE_BMP388
+    // performReading() starts a forced conversion but reads the result registers right away,
+    // which still hold the previous conversion. Start one, wait it out, then read it.
+    bmp388.performReading();
+    delay(BMP388_CONV_TIME);
     bmp388.performReading();
     T = bmp388.temperature;
     P = bmp388.pressure;

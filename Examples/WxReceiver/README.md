@@ -7,8 +7,11 @@ It emulates a subset of the publicly documented commands for the stick. It only 
 
 The sketch can use either a LowPowerLab Weathershield (when used on a Moteino) or any similar Arduino-compatible device equipped with a Hope RF RFM69 series 868/915 MHz transceiver for the proper band for the country.
 
-Supported sensors:
-* SiLabs Si7021 T/H sensor
-* BME280 T/H/P sensor (or WeatherShield R2), BMP280 P/T sensor, BMP180 P/T sensor
+Supported sensors, selected with one `SENSOR_TYPE_` define in the sketch:
+* SiLabs Si7021 T/H sensor (SI7021 library)
+* BMP180 P/T sensor (SparkFun BMP180 library)
+* BMP280 P/T sensor (Adafruit BMP280 library)
+* BME280 T/H/P sensor, or WeatherShield R2 (SparkFun BME280 library 2.x)
+* BMP388 or BMP390 P/T sensor (Adafruit BMP3XX library 2.x)
 
 Or it can be easily adapted for any suitable sensor. They're optional, and can be emulated or code simply removed if observing internal climate conditions is not needed.
