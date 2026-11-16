@@ -6,7 +6,7 @@ The entries follow the version string the WxReceiver sketch prints at startup (`
 
 - **BMP388 oversampling and IIR filter now take effect.** The sketch set 8x temperature and 4x pressure oversampling and IIR filter coefficient 3 before `begin()`, which resets all three to off, so the sensor always ran without them. They are now set after `begin_I2C()`. Before the fix, pressure readings 30 s apart on one receiver differed by 0.08 hPa rms, and by up to 0.22 hPa.
 - **BMP388 readings are current.** The library's `performReading()` starts a forced conversion but reads the result registers straight away, so each reading returned the conversion started 30 s earlier. The sketch now starts a conversion, waits 40 ms for it and then reads it.
-- **BME280 takes one forced measurement per reading.** The sensor now sleeps between readings. Before, it ran in normal mode, and after each reading the sketch wrote 0 to `ctrl_meas`.
+- **BME280 takes one forced measurement per reading.** The sensor now sleeps between readings. Before, it ran in normal mode, and after each reading the sketch wrote 0 to `ctrl_meas`, potentially blocking measurements.
 - **Sensor libraries updated.** Adafruit BMP3XX 2.x is now required. It also supports the BMP390, which 1.x rejects by its chip ID. SparkFun BME280 2.x is now required. It reads the H6 humidity calibration value as signed (1.x read it as unsigned, giving wrong humidity on chips where it is negative) and reads each value in one burst.
 
 ## v2026110601, 2026-11-06 (f21d50d)
