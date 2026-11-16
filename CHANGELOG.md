@@ -1,6 +1,6 @@
 # Changelog
 
-The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`). Most changes live in the DavisRFM69 library, which all examples share.
+The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`).
 
 ## v2026111401, 2026-11-14 (cb211a9)
 
