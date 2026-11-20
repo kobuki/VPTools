@@ -159,6 +159,8 @@ void setDefaults() {
   cfg.windSrc = 2;
   for (byte i = 0; i < 16; i++) cfg.typeSrc[i] = 1;
   cfg.typeSrc[0x9] = 2;  // gust goes with the wind
+  cfg.typeSrc[0x4] = 2;  // UV and solar are on the anemometer transmitter's SIM board here
+  cfg.typeSrc[0x6] = 2;
   cfg.timeout = 180;     // the rarest types come every 20 packets, ~52 s
 }
 
@@ -475,7 +477,7 @@ void command(char *s) {
   printStatus(S_ERR, F("bad command"));
 }
 
-// # OK m1 t3 i3 x190 a12 c1 p0 f1 w2 n180 s 4:1 5:1 6:1 8:1 9:2 A:1 E:1
+// # OK m1 t3 i3 x190 a12 c1 p0 f1 w2 n180 s 4:2 5:1 6:2 8:1 9:2 A:1 E:1
 void cmdShow() {
   Serial.print(F("# OK m"));
   Serial.print(cfg.bandRaw);
