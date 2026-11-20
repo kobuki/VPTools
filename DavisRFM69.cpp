@@ -582,13 +582,16 @@ void DavisRFM69::setTxMode(bool mode)
 // IMPORTANT: make sure buffer is at least 10 bytes
 void DavisRFM69::send(const byte* buffer, byte channel)
 {
+  // back to where the receiver was: the expected station's channel, or the discovery channel. Retuning to
+  // stations[curStation].channel instead kept discovery on channel 0, which also stopped its AFC offset readings
+  byte rxChannel = CHANNEL;
   MsTimer2::stop();
   setTxMode(true);
   writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART); // avoid RX deadlocks
   setChannel(channel);
   sendFrame(buffer);
   setTxMode(false);
-  setChannel(stations != NULL && numStations > 0 ? stations[curStation].channel : discChannel);
+  setChannel(rxChannel);
   MsTimer2::start();
 }
 
