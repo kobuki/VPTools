@@ -31,6 +31,17 @@ volatile bool DavisRFM69::txMode = false;
 volatile uint32_t DavisRFM69::lastTx = micros();
 volatile uint32_t DavisRFM69::txDelay = 0;
 volatile uint32_t DavisRFM69::realTxDelay = 0;
+volatile uint32_t DavisRFM69::txLastTarget = 0;
+volatile uint32_t DavisRFM69::txNextTarget = 0;
+volatile bool DavisRFM69::txLearn = false;
+volatile int32_t DavisRFM69::txPpmAcc = 0;
+volatile uint16_t DavisRFM69::txPpmSamples = 0;
+volatile uint16_t DavisRFM69::txPpmRejects = 0;
+volatile bool DavisRFM69::txAfc = false;
+volatile int16_t DavisRFM69::txAfcApplied = 0;
+volatile byte DavisRFM69::txData[DAVIS_PACKET_LEN];
+volatile int32_t DavisRFM69::txAcc = 0;
+volatile uint16_t DavisRFM69::txTick16 = 0;
 volatile byte DavisRFM69::txId = 255;
 volatile byte DavisRFM69::txChannel = 255;
 volatile byte DavisRFM69::rxRssi = 190; // -95 dBm, same as REG_RSSITHRESH in the init table
@@ -174,17 +185,71 @@ void DavisRFM69::resetAfc() {
 
 void DavisRFM69::handleTxInt() {
   uint32_t t = micros();
+  scheduleTx();  // first, while interrupts are still off (SPI access turns them back on)
   realTxDelay = t - lastTx;
-  (*selfPointer->txCallback)((byte*)DATA);
-  selfPointer->send((byte*)DATA, txChannel);
-  txChannel = selfPointer->nextChannel(txChannel);
-  realTxDelay = (int32_t)(t - lastTx - txDelay);
   lastTx = t;
+  if (txAfc) {
+    int16_t corr = stationsAfc();
+    if (corr != RF69_FEI_INVALID) txAfcApplied = corr;  // no station learned yet: keep the last one
+  }
+  (*selfPointer->txCallback)((byte*)txData);
+  selfPointer->send((byte*)txData, txChannel);
+  txChannel = selfPointer->nextChannel(txChannel);
+}
+
+// Program the next transmit interval: nominal plus the timing correction. Timer1 counts in coarse steps (128 us
+// at 16 MHz, ~48 ppm of an interval), so the remainder carries over and the steps average out to the exact target.
+// Called from the Timer1 ISR at BOTTOM: ICR1 isn't double buffered, but the counter is far below any new TOP.
+void DavisRFM69::scheduleTx() {
+  int32_t corr16 = (int32_t)(txDelay / 100) * txPpm() / 10000;  // txDelay * ppm, in 1/16 us
+  int32_t target16 = (int32_t)txDelay * 16 + corr16;
+  txLastTarget = txNextTarget;
+  txNextTarget = target16 / 16;
+  txAcc += target16;
+  uint16_t steps = txAcc / txTick16;
+  txAcc -= (int32_t)steps * txTick16;
+  ICR1 = steps;
+}
+
+// A station's packet came dt after its previous one, n intervals apart, by this board's clock.
+// Called with interrupts off.
+void DavisRFM69::learnTxTiming(byte id, uint32_t dt, byte n) {
+  if (!txLearn || n > TX_PPM_MAX_SPAN) return;
+  int32_t nominal = (int32_t)(41 + id) * 62500L * n;
+  int32_t err = (int32_t)dt - nominal;
+  if (err > nominal / 100 || err < -nominal / 100) return;  // not n intervals at all
+  int32_t s = err * 256 / ((int32_t)(41 + id) * n);  // err / nominal in 1/16 ppm
+  int32_t acc = s * 16;
+  if (s > TX_PPM_MAX || s < -TX_PPM_MAX
+      || (txPpmSamples >= TX_PPM_FAST && abs(acc - txPpmAcc) > TX_PPM_GATE * 16L)) {
+    if (txPpmRejects < 0xffff) txPpmRejects++;
+    return;
+  }
+  if (txPpmSamples < TX_PPM_FAST) {
+    txPpmAcc += (acc - txPpmAcc) / (txPpmSamples + 1);  // plain mean of the samples so far
+  } else {
+    txPpmAcc += (acc - txPpmAcc) / TX_PPM_SLOW;
+  }
+  if (txPpmSamples < 0xffff) txPpmSamples++;
+}
+
+// Mean software AFC correction of the tracked stations, or RF69_FEI_INVALID if none has one yet.
+// The receiver hears them tuned to the table plus this, so transmitting there lands where they are.
+int16_t DavisRFM69::stationsAfc() {
+  int32_t sum = 0;
+  byte n = 0;
+  for (byte i = 0; i < numStations; i++) {
+    if (stations[i].interval > 0 && stations[i].afcSamples > 0) {
+      sum += stations[i].afcCorr;
+      n++;
+    }
+  }
+  return n > 0 ? sum / n : RF69_FEI_INVALID;
 }
 
 // Handle missed packets. Called from a timer ISR every ms
 void DavisRFM69::handleTimerInt() {
-  if (txMode) return;
+  if (txMode || stations == NULL || numStations == 0) return;
 
   uint32_t t = micros();
   bool readjust = false;
@@ -295,6 +360,7 @@ void DavisRFM69::handleRadioInt() {
     uint32_t expected = stations[stIx].lastRx + stations[stIx].interval;
     uint32_t interval = stations[stIx].interval;
     byte lost = stations[stIx].lostPackets;
+    uint32_t lastSeen = stations[stIx].lastSeen;
     interrupts();
     if (interval > 0) {
       int32_t early = (int32_t)(expected - lastRx);
@@ -314,6 +380,8 @@ void DavisRFM69::handleRadioInt() {
     }
 
     if (swAfc()) updateAfc(&stations[stIx]);
+    // repeated packets come late by the repeater's delay
+    if (interval > 0 && lastSeen > 0 && !repeaterCrcTried) learnTxTiming(id, lastRx - lastSeen, lost + 1);
 
     if (stations[stIx].active) {
       packets++;
@@ -520,7 +588,7 @@ void DavisRFM69::send(const byte* buffer, byte channel)
   setChannel(channel);
   sendFrame(buffer);
   setTxMode(false);
-  setChannel(stations[curStation].channel);
+  setChannel(stations != NULL && numStations > 0 ? stations[curStation].channel : discChannel);
   MsTimer2::start();
 }
 
@@ -535,8 +603,12 @@ void DavisRFM69::sendFrame(const byte* buffer)
   }
   writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00); // DIO0 is "Packet Sent"
 
+  // the transmitter ID goes into byte 0 before the CRC, the battery flag (bit 3) stays
+  byte frame[6];
+  frame[0] = (buffer[0] & 0xf8) | txId;
+  for (byte i = 1; i < 6; i++) frame[i] = buffer[i];
   // calculate crc on first 6 bytes (no repeater info)
-  uint16_t crc = crc16_ccitt((volatile byte *)buffer, 6);
+  uint16_t crc = crc16_ccitt(frame, 6);
   // write to FIFO
   select();
   SPI.transfer(REG_FIFO | 0x80);
@@ -561,13 +633,8 @@ void DavisRFM69::sendFrame(const byte* buffer)
   SPI.transfer(0xcb);
   SPI.transfer(0x89);
 
-  // make sure we use the correct transmitter ID
-  byte byte0 = buffer[0] & 0xf0 | txId;
-  SPI.transfer(reverseBits(byte0));
-
-  // transmit the remaining bytes of the buffer
-  for (byte i = 1; i < 6; i++)
-    SPI.transfer(reverseBits(buffer[i]));
+  for (byte i = 0; i < 6; i++)
+    SPI.transfer(reverseBits(frame[i]));
 
   // transmit crc of first 6 bytes
   SPI.transfer(reverseBits(crc >> 8));
@@ -597,16 +664,22 @@ void DavisRFM69::setChannel(byte channel)
   byte b = pgm_read_byte(&bandTab[band][CHANNEL][1]);
   byte c = pgm_read_byte(&bandTab[band][CHANNEL][2]);
 
-  // software AFC: the expected station's correction, or the last learned one while discovering
-  afcApplied = 0;
-  if (!txMode && stations != NULL && swAfc()) {
-    Station *s = &stations[curStation];
-    afcApplied = (s->interval > 0 && channel == s->channel && s->afcSamples > 0) ? s->afcCorr : afcLast;
+  int32_t corr = freqCorr;
+  if (txMode) {
+    if (txAfc) corr += txAfcApplied;
+  } else {
+    // software AFC: the expected station's correction, or the last learned one while discovering
+    afcApplied = 0;
+    if (stations != NULL && swAfc()) {
+      Station *s = &stations[curStation];
+      afcApplied = (s->interval > 0 && channel == s->channel && s->afcSamples > 0) ? s->afcCorr : afcLast;
+    }
+    corr += afcApplied;
   }
 
-  if (freqCorr != 0 || afcApplied != 0) {
+  if (corr != 0) {
     uint32_t x = ((uint32_t)a<<16) | ((uint32_t)b<<8) | (uint32_t)c;
-    x += freqCorr + afcApplied;
+    x += corr;
     c =  x & 0x0000ff;
     b = (x & 0x00ff00) >> 8;
     a = (x & 0xff0000) >> 16;
@@ -858,8 +931,13 @@ void DavisRFM69::enableTx(void (*function)(byte* buffer), byte ID)
   txId = ID;
   txChannel = 0;
   txDelay = (41 + txId) * timeBase >> 4;
+  txAcc = 0;
+  txNextTarget = txDelay;
   lastTx = micros();
   Timer1.initialize(txDelay);
+  // one Timer1 step in 1/16 us: phase correct mode counts up and down, 2 * prescaler clocks
+  static const uint16_t prescalers[] = { 0, 1, 8, 64, 256, 1024, 0, 0 };
+  txTick16 = prescalers[TCCR1B & 7] * (32000000UL / (F_CPU / 1000)) / 1000;
   Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
 }
 
@@ -875,6 +953,22 @@ void DavisRFM69::disableTx()
 void DavisRFM69::setTimeBase(uint32_t value)
 {
   timeBase = value;
+}
+
+void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
+{
+  noInterrupts();
+  txLearn = learn;
+  txPpmAcc = (int32_t)ppm * 16;
+  txPpmSamples = 0;
+  txPpmRejects = 0;
+  interrupts();
+}
+
+void DavisRFM69::setTxAfc(bool on)
+{
+  txAfc = on;
+  if (!on) txAfcApplied = 0;
 }
 
 void DavisRFM69::setRepeaterPT(bool value)

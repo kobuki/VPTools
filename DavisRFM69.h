@@ -83,6 +83,15 @@
 #define DISCOVERY_STEP   150000000L // time before skipping the discovery channel to avoid interference
 #define SPI_OP_TIMEOUT   15000L     // SPI operation time guard
 
+// Transmit timing follows the received stations: their intervals as this board's clock perceives them give the
+// clock's error against theirs, and the transmitter runs its own interval with the same error. Units are 1/16 ppm.
+#define TX_PPM_ONE        16          // 1 ppm
+#define TX_PPM_MAX        (2000 * TX_PPM_ONE)  // samples beyond this are not station timing
+#define TX_PPM_GATE       (50 * TX_PPM_ONE)    // once settled, samples further than this from the estimate are outliers
+#define TX_PPM_FAST       16          // the first this many samples are averaged plainly
+#define TX_PPM_SLOW       16          // after that each sample moves the estimate 1/TX_PPM_SLOW of the way
+#define TX_PPM_MAX_SPAN   8           // longest gap between two packets of a station used as a sample (intervals)
+
 // Station data structure for managing radio reception
 typedef struct __attribute__((packed)) Station {
   byte id;                  // station ID (set with the DIP switch on original equipment)
@@ -123,7 +132,15 @@ class DavisRFM69 {
     static volatile int16_t freqCorr;
     static volatile uint32_t lastTx;
     static volatile uint32_t txDelay;
-    static volatile uint32_t realTxDelay;
+    static volatile uint32_t realTxDelay;   // the transmit interval that just ended, by micros()
+    static volatile uint32_t txLastTarget;  // the interval it was scheduled for, including the timing correction (micros)
+    static volatile bool txLearn;           // learn txPpm from the received stations, or keep it fixed
+    static volatile int32_t txPpmAcc;       // transmit timing correction, 1/256 ppm
+    static volatile uint16_t txPpmSamples;  // samples behind it (saturates)
+    static volatile uint16_t txPpmRejects;  // samples rejected as outliers
+    static volatile bool txAfc;             // correct the transmit frequency with the software AFC's learned offset
+    static volatile int16_t txAfcApplied;   // transmit frequency correction in use (FSTEP)
+    static volatile byte txData[DAVIS_PACKET_LEN];  // transmit buffer, separate from DATA which the receiver owns
     static volatile uint32_t timeBase;
     static volatile byte txId;
     static volatile byte txChannel;
@@ -192,12 +209,21 @@ class DavisRFM69 {
     void setFreqCorr(int16_t value);
     void setAfc(byte mode);
     void setTimeBase(uint32_t value);
+    void setTxTiming(bool learn, int16_t ppm);  // ppm in 1/16 ppm: start value when learning, fixed value otherwise
+    static int16_t txPpm() { return txPpmAcc / 16; }  // current correction, 1/16 ppm
+    void setTxAfc(bool on);
     void setRepeaterPT(bool value = false);
     void enableTx(void (*function)(byte* buffer), byte ID);
     void disableTx();
 
   protected:
     static volatile bool txMode;
+    static volatile int32_t txAcc;      // transmit schedule remainder below one Timer1 step (1/16 us)
+    static volatile uint16_t txTick16;  // one Timer1 step (1/16 us)
+    static void scheduleTx();
+    static void learnTxTiming(byte id, uint32_t dt, byte n);
+    static int16_t stationsAfc();
+    static volatile uint32_t txNextTarget;  // the interval the running one is scheduled for (micros)
     void (*txCallback)(byte* buffer);
 
     void virtual interruptHandler();
