@@ -938,6 +938,12 @@ void DavisRFM69::enableTx(void (*function)(byte* buffer), byte ID)
   // one Timer1 step in 1/16 us: phase correct mode counts up and down, 2 * prescaler clocks
   static const uint16_t prescalers[] = { 0, 1, 8, 64, 256, 1024, 0, 0 };
   txTick16 = prescalers[TCCR1B & 7] * (32000000UL / (F_CPU / 1000)) / 1000;
+  // Timer1 was already running (the Arduino core sets it up for PWM) with its overflow flag pending, which fired
+  // a transmission right away: start the count over and clear the flag (1, not 0: TCNT1 = 0 sets it again)
+  noInterrupts();
+  TCNT1 = 1;
+  TIFR1 = _BV(TOV1);
+  interrupts();
   Timer1.attachInterrupt(DavisRFM69::handleTxInt, txDelay);
 }
 

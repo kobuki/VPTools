@@ -16,7 +16,7 @@
 // Commands (end with CR or LF; settings take effect at once, e saves them to EEPROM):
 //   m<0|1|2|5>  band: US, EU, AU, NZ
 //   t<mask>     stations to receive: bit 0 = ID 1 ... bit 7 = ID 8
-//   i<1..8>     transmitter ID to send as
+//   i<0..8>     transmitter ID to send as, 0 = transmitter off (receive only)
 //   x<raw>      RSSI threshold, raw (190 = -95 dBm)
 //   a<n|h>      AFC: 0 off, 1..50 software AFC limited to +/- n kHz, h RFM69 HW AFC
 //   c<0|1>      transmit timing: 0 fixed at p, 1 learned from the received stations, starting at p
@@ -38,7 +38,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112001")
+#define NAME_VERSION F("RXTX v2026112002")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5254  // "RT", change when Config changes
@@ -50,7 +50,7 @@ struct Config {
   uint16_t magic;
   byte bandRaw;       // m
   byte stations;      // t
-  byte txId;          // i, 1..8
+  byte txId;          // i, 1..8, 0 = off
   byte rssi;          // x
   byte afc;           // a
   byte learn;         // c
@@ -189,7 +189,7 @@ void startRadio() {
   radio.setBandwidth(RF69_DAVIS_BW_WIDE);
   radio.setAfc(cfg.afc);
   radio.setTxAfc(cfg.txAfc);
-  radio.enableTx(preparePacket, cfg.txId - 1);
+  if (cfg.txId > 0) radio.enableTx(preparePacket, cfg.txId - 1);
 }
 
 void restartRadio() {
@@ -382,7 +382,7 @@ void command(char *s) {
       return;
 
     case 'i':
-      if (!num || v < 1 || v > 8) break;
+      if (!num || v < 0 || v > 8) break;
       cfg.txId = v;
       restartRadio();
       cmdShow();
