@@ -39,6 +39,8 @@ volatile uint16_t DavisRFM69::txPpmSamples = 0;
 volatile uint16_t DavisRFM69::txPpmRejects = 0;
 volatile bool DavisRFM69::txAfc = false;
 volatile int16_t DavisRFM69::txAfcApplied = 0;
+volatile byte DavisRFM69::txFrame = TX_FRAME_LEGACY;
+volatile bool DavisRFM69::txDither = true;
 volatile byte DavisRFM69::txData[DAVIS_PACKET_LEN];
 volatile int32_t DavisRFM69::txAcc = 0;
 volatile uint16_t DavisRFM69::txTick16 = 0;
@@ -205,9 +207,14 @@ void DavisRFM69::scheduleTx() {
   int32_t target16 = (int32_t)txDelay * 16 + corr16;
   txLastTarget = txNextTarget;
   txNextTarget = target16 / 16;
-  txAcc += target16;
-  uint16_t steps = txAcc / txTick16;
-  txAcc -= (int32_t)steps * txTick16;
+  uint16_t steps;
+  if (txDither) {
+    txAcc += target16;
+    steps = txAcc / txTick16;
+    txAcc -= (int32_t)steps * txTick16;
+  } else {
+    steps = (target16 + txTick16 / 2) / txTick16;  // the same period every time, up to half a step off
+  }
   ICR1 = steps;
 }
 
@@ -562,13 +569,20 @@ void DavisRFM69::setTxMode(bool mode)
 {
   if (mode) {
     txMode = mode;
-    writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
-    writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
+    // the whole frame (lead, preamble, sync, packet, trailer) goes through the FIFO
+    byte len = txFrame == TX_FRAME_DAVIS ? TX_LEN_DAVIS : TX_LEN_LEGACY;
+    if (txFrame == TX_FRAME_DAVIS) {
+      // 170 x 61 Hz = 10.4 kHz: on the SDR, Davis transmitters' deviation measured 3.5 % above our 10 kHz setting's
+      writeReg(REG_FDEVMSB, 0x00);
+      writeReg(REG_FDEVLSB, 0xaa);
+    } else {
+      writeReg(REG_FDEVMSB, RF_FDEVMSB_10000);
+      writeReg(REG_FDEVLSB, RF_FDEVLSB_10000);
+    }
     writeReg(REG_PREAMBLELSB, 0);
     writeReg(REG_SYNCCONFIG, RF_SYNC_OFF);
-    // +13 = 4 bytes "carrier" (0xff) + 6 bytes preamble (0xaa) + 3 bytes carrier
-    writeReg(REG_PAYLOADLENGTH, DAVIS_PACKET_LEN + 13);
-    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (DAVIS_PACKET_LEN + 13 - 1));
+    writeReg(REG_PAYLOADLENGTH, len);
+    writeReg(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTART_FIFOTHRESH | (len - 1));
   } else {
     writeReg(REG_FDEVMSB, RF_FDEVMSB_9900);
     writeReg(REG_FDEVLSB, RF_FDEVLSB_9900);
@@ -612,45 +626,70 @@ void DavisRFM69::sendFrame(const byte* buffer)
   for (byte i = 1; i < 6; i++) frame[i] = buffer[i];
   // calculate crc on first 6 bytes (no repeater info)
   uint16_t crc = crc16_ccitt(frame, 6);
-  // write to FIFO
-  select();
-  SPI.transfer(REG_FIFO | 0x80);
+  if (txFrame == TX_FRAME_DAVIS) {
+    // Davis' on-air structure, measured with an SDR: 18 bits lead on the '1' tone, 32 bits preamble,
+    // sync word, the 10 packet bytes, then a short trailer. The FIFO takes whole bytes, so the bits are
+    // packed: 18 + 32 + 16 + 80 = 146, padded with '1' bits to 152 (19 bytes).
+    byte f[TX_LEN_DAVIS];
+    byte nb = 0;
+    memset(f, 0, sizeof(f));
+    putBits(f, nb, 0xff, 8);
+    putBits(f, nb, 0xff, 8);
+    putBits(f, nb, 0x03, 2);
+    for (byte i = 0; i < 4; i++) putBits(f, nb, 0xaa, 8);
+    putBits(f, nb, 0xcb, 8);
+    putBits(f, nb, 0x89, 8);
+    for (byte i = 0; i < 6; i++) putBits(f, nb, reverseBits(frame[i]), 8);
+    putBits(f, nb, reverseBits(crc >> 8), 8);
+    putBits(f, nb, reverseBits(crc & 0xff), 8);
+    putBits(f, nb, 0xff, 8);  // repeater info: none
+    putBits(f, nb, 0xff, 8);
+    putBits(f, nb, 0xff, TX_LEN_DAVIS * 8 - nb);  // trailer
+    select();
+    SPI.transfer(REG_FIFO | 0x80);
+    for (byte i = 0; i < TX_LEN_DAVIS; i++) SPI.transfer(f[i]);
+    unselect();
+  } else {
+    // write to FIFO
+    select();
+    SPI.transfer(REG_FIFO | 0x80);
 
-  // The following byte sequence is an attempt to emulate the original Davis packet structure.
+    // The following byte sequence is an attempt to emulate the original Davis packet structure.
 
-  // carrier on/start
-  SPI.transfer(0xff);
-  SPI.transfer(0xff);
-  SPI.transfer(0xff);
-  SPI.transfer(0xff);
+    // carrier on/start
+    SPI.transfer(0xff);
+    SPI.transfer(0xff);
+    SPI.transfer(0xff);
+    SPI.transfer(0xff);
 
-  // preamble
-  SPI.transfer(0xaa);
-  SPI.transfer(0xaa);
-  SPI.transfer(0xaa);
-  SPI.transfer(0xaa);
-  SPI.transfer(0xaa);
-  SPI.transfer(0xaa);
+    // preamble
+    SPI.transfer(0xaa);
+    SPI.transfer(0xaa);
+    SPI.transfer(0xaa);
+    SPI.transfer(0xaa);
+    SPI.transfer(0xaa);
+    SPI.transfer(0xaa);
 
-  // sync word
-  SPI.transfer(0xcb);
-  SPI.transfer(0x89);
+    // sync word
+    SPI.transfer(0xcb);
+    SPI.transfer(0x89);
 
-  for (byte i = 0; i < 6; i++)
-    SPI.transfer(reverseBits(frame[i]));
+    for (byte i = 0; i < 6; i++)
+      SPI.transfer(reverseBits(frame[i]));
 
-  // transmit crc of first 6 bytes
-  SPI.transfer(reverseBits(crc >> 8));
-  SPI.transfer(reverseBits(crc & 0xff));
+    // transmit crc of first 6 bytes
+    SPI.transfer(reverseBits(crc >> 8));
+    SPI.transfer(reverseBits(crc & 0xff));
 
-  // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeater)
-  SPI.transfer(0xff);
-  SPI.transfer(0xff);
+    // transmit dummy repeater info (always 0xff, 0xff for a normal packet without repeater)
+    SPI.transfer(0xff);
+    SPI.transfer(0xff);
 
-  // add one extra for stability
-  SPI.transfer(0xff);
+    // add one extra for stability
+    SPI.transfer(0xff);
 
-  unselect();
+    unselect();
+  }
 
   setMode(RF69_MODE_TX);
   t = micros(); // wait SPI_OP_TIMEOUT ms max (transmission time is about 9.5 ms)
@@ -972,6 +1011,25 @@ void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
   txPpmSamples = 0;
   txPpmRejects = 0;
   interrupts();
+}
+
+void DavisRFM69::setTxDither(bool on)
+{
+  txDither = on;
+}
+
+void DavisRFM69::setTxFrame(byte frame)
+{
+  txFrame = frame == TX_FRAME_DAVIS ? TX_FRAME_DAVIS : TX_FRAME_LEGACY;
+}
+
+// append the low n bits of v, MSB first, to the bit buffer f at bit position nb
+void DavisRFM69::putBits(byte *f, byte &nb, byte v, byte n)
+{
+  while (n--) {
+    if (v & (1 << n)) f[nb >> 3] |= 0x80 >> (nb & 7);
+    nb++;
+  }
 }
 
 void DavisRFM69::setTxAfc(bool on)

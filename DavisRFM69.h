@@ -110,6 +110,12 @@ typedef struct __attribute__((packed)) Station {
   byte afcSamples;          // software AFC: number of FEI samples behind afcCorr (saturates)
 };
 
+// on-air framing of transmitted packets
+#define TX_FRAME_LEGACY 0  // 32 bits '1' lead, 48 bits preamble, 8 bits '1' trailer, 10 kHz deviation
+#define TX_FRAME_DAVIS  1  // as measured on Davis transmitters: 18 bits lead, 32 bits preamble, short trailer, 10.4 kHz
+#define TX_LEN_LEGACY (DAVIS_PACKET_LEN + 13)  // 4 lead + 6 preamble + 2 sync + 10 packet + 1 trailer bytes
+#define TX_LEN_DAVIS 19                        // 146 bits, padded to whole bytes
+
 class DavisRFM69 {
   public:
     static volatile byte DATA[DAVIS_PACKET_LEN];  // recv/xmit buf, including header, CRC, and RSSI value
@@ -140,6 +146,8 @@ class DavisRFM69 {
     static volatile uint16_t txPpmRejects;  // samples rejected as outliers
     static volatile bool txAfc;             // correct the transmit frequency with the software AFC's learned offset
     static volatile int16_t txAfcApplied;   // transmit frequency correction in use (FSTEP)
+    static volatile byte txFrame;           // TX_FRAME_LEGACY or TX_FRAME_DAVIS
+    static volatile bool txDither;          // dither the Timer1 period to hit the target interval on average
     static volatile byte txData[DAVIS_PACKET_LEN];  // transmit buffer, separate from DATA which the receiver owns
     static volatile uint32_t timeBase;
     static volatile byte txId;
@@ -212,6 +220,8 @@ class DavisRFM69 {
     void setTxTiming(bool learn, int16_t ppm);  // ppm in 1/16 ppm: start value when learning, fixed value otherwise
     static int16_t txPpm() { return txPpmAcc / 16; }  // current correction, 1/16 ppm
     void setTxAfc(bool on);
+    void setTxFrame(byte frame);  // TX_FRAME_LEGACY or TX_FRAME_DAVIS
+    void setTxDither(bool on);    // off: every interval is the target rounded to whole Timer1 steps
     void setRepeaterPT(bool value = false);
     void enableTx(void (*function)(byte* buffer), byte ID);
     void disableTx();
@@ -228,6 +238,7 @@ class DavisRFM69 {
 
     void virtual interruptHandler();
     void sendFrame(const byte* buffer);
+    static void putBits(byte *f, byte &nb, byte v, byte n);
     byte reverseBits(byte b);
 
     static void isr0();
