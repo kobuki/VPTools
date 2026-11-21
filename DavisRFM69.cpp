@@ -156,6 +156,7 @@ void DavisRFM69::initialize(byte freqBand)
 
   fifo.flush();
   initStations();
+  stationsFound = 0;  // a restart (new band or station set) starts discovering again
   resetAfc();
   lastDiscStep = micros();
 
@@ -170,9 +171,13 @@ void DavisRFM69::stopReceiver() {
 }
 
 void DavisRFM69::setStations(Station *_stations, byte n) {
+  noInterrupts();  // the receiver timer may already be running
   stations = _stations;
   numStations = n;
+  initStations();
+  stationsFound = 0;  // with a stale count, stationsFound >= numStations stopped discovery for good
   resetAfc();
+  interrupts();
 }
 
 // AFC corrections survive resyncs (the crystal drift is still there), but not a restart or a new station set

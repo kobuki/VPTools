@@ -204,7 +204,7 @@ class DavisRFM69 {
     byte nextChannel(byte channel);
     int findStation(byte id);
     void handleRadioInt();
-    void initStations();
+    static void initStations();
     void nextStation();
 
     static void handleTimerInt();
