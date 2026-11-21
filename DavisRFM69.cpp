@@ -39,8 +39,7 @@ volatile uint16_t DavisRFM69::txPpmSamples = 0;
 volatile uint16_t DavisRFM69::txPpmRejects = 0;
 volatile bool DavisRFM69::txAfc = false;
 volatile int16_t DavisRFM69::txAfcApplied = 0;
-volatile byte DavisRFM69::txFrame = TX_FRAME_LEGACY;
-volatile bool DavisRFM69::txDither = true;
+volatile byte DavisRFM69::txFrame = TX_FRAME_DAVIS;
 volatile byte DavisRFM69::txData[DAVIS_PACKET_LEN];
 volatile int32_t DavisRFM69::txAcc = 0;
 volatile uint16_t DavisRFM69::txTick16 = 0;
@@ -212,14 +211,9 @@ void DavisRFM69::scheduleTx() {
   int32_t target16 = (int32_t)txDelay * 16 + corr16;
   txLastTarget = txNextTarget;
   txNextTarget = target16 / 16;
-  uint16_t steps;
-  if (txDither) {
-    txAcc += target16;
-    steps = txAcc / txTick16;
-    txAcc -= (int32_t)steps * txTick16;
-  } else {
-    steps = (target16 + txTick16 / 2) / txTick16;  // the same period every time, up to half a step off
-  }
+  txAcc += target16;
+  uint16_t steps = txAcc / txTick16;
+  txAcc -= (int32_t)steps * txTick16;
   ICR1 = steps;
 }
 
@@ -1016,11 +1010,6 @@ void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
   txPpmSamples = 0;
   txPpmRejects = 0;
   interrupts();
-}
-
-void DavisRFM69::setTxDither(bool on)
-{
-  txDither = on;
 }
 
 void DavisRFM69::setTxFrame(byte frame)
