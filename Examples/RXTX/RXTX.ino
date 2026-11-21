@@ -25,6 +25,7 @@
 //   w<0..8>     wind source station ID (0 = no wind sensor)
 //   s<T><0..8>  source station ID for packet type T (hex nibble of byte 0, eg. s92 = gust from ID 2)
 //   n<s>        seconds without data from a source before its "no sensor" values are sent
+//   h<0|1>      RFM69 module: 0 W/CW (PA0, +13 dBm), 1 HW/HCW (PA_BOOST, +20 dBm); a mismatch transmits only leakage
 //   e           save settings to EEPROM
 //   d           load the defaults (not saved)
 //   r           reset
@@ -38,10 +39,10 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112003")
+#define NAME_VERSION F("RXTX v2026112101")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
-#define CFG_MAGIC 0x5254  // "RT", change when Config changes
+#define CFG_MAGIC 0x5255  // change when Config changes
 
 #define S_OK true
 #define S_ERR false
@@ -59,6 +60,7 @@ struct Config {
   byte windSrc;       // w, 0..8
   byte typeSrc[16];   // s, 0..8 per packet type
   byte timeout;       // n
+  byte highPower;     // h
 };
 
 Config cfg;
@@ -162,6 +164,7 @@ void setDefaults() {
   cfg.typeSrc[0x4] = 2;  // UV and solar are on the anemometer transmitter's SIM board here
   cfg.typeSrc[0x6] = 2;
   cfg.timeout = 180;     // the rarest types come every 20 packets, ~52 s
+  cfg.highPower = 1;     // RFM69HW/HCW
 }
 
 byte band(byte raw) {
@@ -184,6 +187,7 @@ void startRadio() {
     }
   }
   radio.initialize(band(cfg.bandRaw));
+  radio.setHighPower(cfg.highPower);
   radio.setStations(stations, numStations);
   radio.setRssiThresholdRaw(cfg.rssi);
   radio.setBandwidth(RF69_DAVIS_BW_WIDE);
@@ -450,6 +454,13 @@ void command(char *s) {
       cmdShow();
       return;
 
+    case 'h':
+      if (!num || v < 0 || v > 1) break;
+      cfg.highPower = v;
+      restartRadio();
+      cmdShow();
+      return;
+
     case 'e':
       EEPROM.put(0, cfg);
       printStatus(S_OK, F("saved"));
@@ -477,7 +488,7 @@ void command(char *s) {
   printStatus(S_ERR, F("bad command"));
 }
 
-// # OK m1 t3 i3 x190 a12 c1 p0 f1 w2 n180 s 4:2 5:1 6:2 8:1 9:2 A:1 E:1
+// # OK m1 t3 i3 x190 a12 c1 p0 f1 w2 n180 h1 s 4:2 5:1 6:2 8:1 9:2 A:1 E:1
 void cmdShow() {
   Serial.print(F("# OK m"));
   Serial.print(cfg.bandRaw);
@@ -499,6 +510,8 @@ void cmdShow() {
   Serial.print(cfg.windSrc);
   Serial.print(F(" n"));
   Serial.print(cfg.timeout);
+  Serial.print(F(" h"));
+  Serial.print(cfg.highPower);
   Serial.print(F(" s"));
   // the packet types the VP2 sequence sends
   static const byte types[] = { 0x4, 0x5, 0x6, 0x8, 0x9, 0xa, 0xe };
