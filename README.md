@@ -6,7 +6,7 @@ VPTools is a Davis(TM) weather station compatible transceiver library. It can re
 
 ### WxReceiver
 
-The WxReceiver sketch is a receiver meant to be used with the custom driver: [weewx-meteoRX](https://github.com/kobuki/weewx-meteoRX), which was originally based on the [WeeWx driver](https://github.com/matthewwall/weewx-meteostick) written by Matthew Wall et al for the Meteostick.
+The WxReceiver sketch is a receiver meant to be used with the custom driver, [weewx-meteoRX](https://github.com/kobuki/weewx-meteoRX), which was originally based on the [WeeWx driver](https://github.com/matthewwall/weewx-meteostick) written by Matthew Wall et al for the Meteostick.
 
 **NOTE:** It should still be compatible with the original driver, but compatibility is not verified any more for new WxReceiver versions.
 
