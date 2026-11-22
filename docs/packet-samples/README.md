@@ -2,9 +2,6 @@
 
 Captured on 2026-11-07 with an RTL-SDR stick. Settings: 2.4 Msps, gain 29.7. The stick reads about 2 ppm high, and no correction was applied.
 
-- `eu.u8`: EU band, centre 867.8 MHz, 60 s. Only station 2 (the anemometer) decodes from the VM's location. Station 1 (the ISS) is too weak there.
-- `us.u8`: US band, centre 915.1 MHz, 180 s. US test transmitter (packet ID field 0, so station 1).
-
 | File | Carrier | Station | Packet (firmware byte order) |
 |---|---|---|---|
 | `eu-1.png` | 868.4215 MHz | 2 | E1 00 72 80 03 00 0F 8C FF FF |
