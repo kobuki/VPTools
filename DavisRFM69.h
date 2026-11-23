@@ -149,6 +149,7 @@ class DavisRFM69 {
     static volatile byte txFrame;           // TX_FRAME_LEGACY or TX_FRAME_DAVIS
     static volatile byte txData[DAVIS_PACKET_LEN];  // transmit buffer, separate from DATA which the receiver owns
     static volatile uint32_t timeBase;
+    static volatile bool rxOn;              // the receiver runs between transmissions; false after stopReceiver()
     static volatile byte txId;
     static volatile byte txChannel;
     static volatile byte rxRssi;
@@ -216,8 +217,10 @@ class DavisRFM69 {
     void setFreqCorr(int16_t value);
     void setAfc(byte mode);
     void setTimeBase(uint32_t value);
-    void setTxTiming(bool learn, int16_t ppm);  // ppm in 1/16 ppm: start value when learning, fixed value otherwise
-    static int16_t txPpm() { return txPpmAcc / 16; }  // current correction, 1/16 ppm
+    void setTxTiming(bool learn, int32_t ppm);  // ppm in 1/16 ppm: start value when learning, fixed value otherwise
+    static int32_t txPpm() { return txPpmAcc / 16; }  // current correction, 1/16 ppm
+    uint32_t timeRxTimeout(uint16_t bitrate, byte n);
+    static uint32_t txTimeLeft();  // micros until the next transmission  // micros() until the RFM69's RX start timeout, 0 if not possible
     void setTxAfc(bool on);
     void setTxFrame(byte frame);  // TX_FRAME_LEGACY or TX_FRAME_DAVIS
     void setRepeaterPT(bool value = false);

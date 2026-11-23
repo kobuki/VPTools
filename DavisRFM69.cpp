@@ -67,6 +67,7 @@ volatile byte DavisRFM69::discChannel = 2;
 volatile uint32_t DavisRFM69::lastDiscStep;
 volatile int16_t DavisRFM69::freqCorr = 0;
 volatile uint32_t DavisRFM69::timeBase = 1000000;
+volatile bool DavisRFM69::rxOn = false;
 volatile bool DavisRFM69::repeaterPT = false;
 
 PacketFifo DavisRFM69::fifo;
@@ -159,13 +160,16 @@ void DavisRFM69::initialize(byte freqBand)
   resetAfc();
   lastDiscStep = micros();
 
+  rxOn = true;
   MsTimer2::set(1, DavisRFM69::handleTimerInt);
   MsTimer2::start();
 }
 
+// Stops the receiver and the transmitter. Call enableTx() after it for a transmitter that sleeps between packets.
 void DavisRFM69::stopReceiver() {
   Timer1.detachInterrupt();
   MsTimer2::stop();
+  rxOn = false;
   setMode(RF69_MODE_SLEEP);
 }
 
@@ -207,7 +211,7 @@ void DavisRFM69::handleTxInt() {
 // at 16 MHz, ~48 ppm of an interval), so the remainder carries over and the steps average out to the exact target.
 // Called from the Timer1 ISR at BOTTOM: ICR1 isn't double buffered, but the counter is far below any new TOP.
 void DavisRFM69::scheduleTx() {
-  int32_t corr16 = (int32_t)(txDelay / 100) * txPpm() / 10000;  // txDelay * ppm, in 1/16 us
+  int32_t corr16 = (int64_t)txDelay * txPpm() / 1000000;  // txDelay * ppm, in 1/16 us; a resonator can be 5000 ppm off
   int32_t target16 = (int32_t)txDelay * 16 + corr16;
   txLastTarget = txNextTarget;
   txNextTarget = target16 / 16;
@@ -604,8 +608,13 @@ void DavisRFM69::send(const byte* buffer, byte channel)
   setChannel(channel);
   sendFrame(buffer);
   setTxMode(false);
-  setChannel(rxChannel);
-  MsTimer2::start();
+  if (rxOn) {
+    setChannel(rxChannel);
+    MsTimer2::start();
+  } else {
+    if (_isRFM69HW) setHighPowerRegs(false);
+    setMode(RF69_MODE_SLEEP);  // transmitter only: sleep until the next packet
+  }
 }
 
 // IMPORTANT: make sure buffer is at least 6 bytes
@@ -1004,7 +1013,7 @@ void DavisRFM69::setTimeBase(uint32_t value)
   timeBase = value;
 }
 
-void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
+void DavisRFM69::setTxTiming(bool learn, int32_t ppm)
 {
   noInterrupts();
   txLearn = learn;
@@ -1012,6 +1021,66 @@ void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
   txPpmSamples = 0;
   txPpmRejects = 0;
   interrupts();
+}
+
+uint32_t DavisRFM69::txTimeLeft()
+{
+  noInterrupts();
+  int32_t left = txNextTarget - (micros() - lastTx);
+  interrupts();
+  return left < 0 ? 0 : left;
+}
+
+// Measure this board's clock against the RFM69's crystal. In RX, the RFM69 raises its Timeout flag
+// n * 16 bit times after entering RX (RegRxTimeout1), and the bit time comes from the crystal: n * bitrate / 2 us
+// at 32 MHz. Returns the micros() from the mode write to the flag, or 0 if the next transmission is due before it
+// could finish, or the flag didn't come. The RSSI threshold is 0 dBm, so nothing received stops the timer.
+// The start-up delay between the mode write and the timer's start is in the result: take the difference of two
+// lengths to cancel it. The receiver must be stopped (stopReceiver()); leaves the radio in standby.
+uint32_t DavisRFM69::timeRxTimeout(uint16_t bitrate, byte n)
+{
+  uint32_t expected = (uint32_t)n * bitrate / 2;
+  uint32_t limit = expected + expected / 50 + 5000;  // a resonator is within 0.5 %
+  if (rxOn || n == 0) return 0;
+  if (txCallback != NULL && txTimeLeft() < limit + 20000) return 0;
+
+  setMode(RF69_MODE_STANDBY);
+  while ((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00);
+  if (_isRFM69HW) setHighPowerRegs(false);
+  writeReg(REG_BITRATEMSB, bitrate >> 8);
+  writeReg(REG_BITRATELSB, bitrate & 0xff);
+  writeReg(REG_RSSITHRESH, 0);
+  writeReg(REG_RXTIMEOUT2, 0);
+  writeReg(REG_RXTIMEOUT1, n);
+  byte opmode = readReg(REG_OPMODE) & 0xE3;
+
+  // the time stamps are taken the same way at both ends, with interrupts off, so the latencies cancel
+  noInterrupts();
+  digitalWrite(_slaveSelectPin, LOW);
+  SPI.transfer(REG_OPMODE | 0x80);
+  SPI.transfer(opmode | RF_OPMODE_RECEIVER);
+  digitalWrite(_slaveSelectPin, HIGH);
+  uint32_t t0 = micros();
+  interrupts();
+  uint32_t t1;
+  byte flags;
+  do {
+    noInterrupts();
+    digitalWrite(_slaveSelectPin, LOW);
+    SPI.transfer(REG_IRQFLAGS1 & 0x7f);
+    flags = SPI.transfer(0);
+    digitalWrite(_slaveSelectPin, HIGH);
+    t1 = micros();
+    interrupts();
+  } while (!(flags & RF_IRQFLAGS1_TIMEOUT) && t1 - t0 < limit);
+
+  writeReg(REG_OPMODE, opmode | RF_OPMODE_STANDBY);
+  writeReg(REG_RXTIMEOUT1, 0);
+  writeReg(REG_BITRATEMSB, RF_BITRATEMSB_19200);
+  writeReg(REG_BITRATELSB, RF_BITRATELSB_19200);
+  writeReg(REG_RSSITHRESH, rxRssi);
+  _mode = RF69_MODE_STANDBY;
+  return (flags & RF_IRQFLAGS1_TIMEOUT) ? t1 - t0 : 0;
 }
 
 void DavisRFM69::setTxFrame(byte frame)
