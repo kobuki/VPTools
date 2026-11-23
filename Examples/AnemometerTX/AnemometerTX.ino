@@ -70,7 +70,9 @@
 #ifndef CAL_PERIOD_S
 #define CAL_PERIOD_S 1800     // seconds between calibration bursts; 0 = continuously (testing)
 #endif
-#define CAL_BURST 4           // measurements per calibration; their median is applied
+#ifndef CAL_BURST
+#define CAL_BURST 4           // measurements per calibration, their median is applied; more for a noisier board
+#endif
 #define CAL_BITRATE 17256     // RFM69 bitrate register: bit time 539.25 us, timeout unit 8.628 ms
 #define CAL_N_LONG 255        // 2.200140 s, fits in the shortest transmit gap (ID 1, 2.5625 s)
 #define CAL_N_SHORT 8         // 0.069024 s; the difference, 2.131116 s, is the measured span
