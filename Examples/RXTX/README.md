@@ -13,6 +13,8 @@ Any ATmega328P board with an RFM69 module (a Moteino is suggested) for the band 
 
 The board talks over the serial port at 115200 baud. Commands end with CR or LF.
 
+The LED on D9 (Moteino) blinks briefly for each received packet and longer for each transmission. Set `LED` to -1 in the sketch for a board without one.
+
 ## Commands and settings
 
 Each setting takes effect at once and is echoed in the status line, but it is **not saved**. Settings persist only after the `e` command, which writes them to EEPROM. At the next start the saved settings are loaded. Anything changed since the last `e` is lost when the board resets or loses power. Without saved settings, the board starts with the defaults below.

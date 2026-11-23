@@ -40,10 +40,13 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112301")
+#define NAME_VERSION F("RXTX v2026112302")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes
+#define LED 9             // Moteinos have the LED on D9; -1 for none
+#define LED_RX_MS 20      // LED blink on each received packet
+#define LED_TX_MS 100     // LED blink on each transmission
 
 #define S_OK true
 #define S_ERR false
@@ -126,7 +129,25 @@ volatile int16_t txPpm;
 volatile uint16_t txSamples, txRejects;
 volatile int16_t txAfcCorr;
 
+// non-blocking LED blink, switched off from loop()
+uint32_t ledOn, ledMs;
+
+void blink(uint16_t ms) {
+  if (LED < 0) return;
+  digitalWrite(LED, HIGH);
+  ledOn = millis();
+  ledMs = ms;
+}
+
+void ledOff() {
+  if (LED >= 0 && ledMs && millis() - ledOn >= ledMs) {
+    digitalWrite(LED, LOW);
+    ledMs = 0;
+  }
+}
+
 void setup() {
+  if (LED >= 0) pinMode(LED, OUTPUT);
   Serial.begin(SERIAL_BAUD);
   delay(500);
   EEPROM.get(0, cfg);
@@ -145,8 +166,13 @@ void loop() {
     RadioData *rd = radio.fifo.dequeue();
     store(rd->packet);
     printIPacket(rd);
+    blink(LED_RX_MS);
   }
-  if (txReport) printTPacket();
+  if (txReport) {
+    printTPacket();
+    blink(LED_TX_MS);
+  }
+  ledOff();
   processSerial();
 }
 
