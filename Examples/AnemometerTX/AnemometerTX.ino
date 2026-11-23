@@ -74,6 +74,8 @@
 #define CAL_BITRATE 17256     // RFM69 bitrate register: bit time 539.25 us, timeout unit 8.628 ms
 #define CAL_N_LONG 255        // 2.200140 s, fits in the shortest transmit gap (ID 1, 2.5625 s)
 #define CAL_N_SHORT 8         // 0.069024 s; the difference, 2.131116 s, is the measured span
+#define CAL_UNIT_PPM 1095     // the RFM69's timeout unit is this much longer than 16 bit times (measured on an
+                              // RFM69HCW and an RFM69CW against NTP: 1095 +/- 5 ppm, at all bitrates)
 #define CAL_MAX_PPM 1000      // a measurement further off is a failure, not the board's clock
 #define CAL_MAX_FAILS 8       // a burst is given up after this many failed measurements
 
@@ -275,7 +277,8 @@ void calibrate() {
 
   uint32_t ts = radio.timeRxTimeout(CAL_BITRATE, CAL_N_SHORT);
   radio.sleep();
-  const int32_t span = (int32_t)(CAL_N_LONG - CAL_N_SHORT) * CAL_BITRATE / 2;
+  const int32_t nominal = (int32_t)(CAL_N_LONG - CAL_N_SHORT) * CAL_BITRATE / 2;
+  const int32_t span = nominal + (int64_t)nominal * CAL_UNIT_PPM / 1000000;
   int32_t ppm = (ts == 0 || ts >= calLong) ? 0 : (int64_t)((int32_t)(calLong - ts) - span) * 16000000LL / span;
   if (ts == 0 || ts >= calLong || abs(ppm) > CAL_MAX_PPM * TX_PPM_ONE) {
     calFailed(calLong, ts);

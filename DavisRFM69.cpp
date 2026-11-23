@@ -1032,8 +1032,8 @@ uint32_t DavisRFM69::txTimeLeft()
 }
 
 // Measure this board's clock against the RFM69's crystal. In RX, the RFM69 raises its Timeout flag
-// n * 16 bit times after entering RX (RegRxTimeout1), and the bit time comes from the crystal: n * bitrate / 2 us
-// at 32 MHz. Returns the micros() from the mode write to the flag, or 0 if the next transmission is due before it
+// n timeout units after entering RX (RegRxTimeout1). The unit follows the crystal and the bitrate register: the
+// datasheet gives 16 bit times (bitrate / 2 us at 32 MHz), but measured it is 1095 ppm longer. Returns the micros() from the mode write to the flag, or 0 if the next transmission is due before it
 // could finish, or the flag didn't come. The RSSI threshold is 0 dBm, so nothing received stops the timer.
 // The start-up delay between the mode write and the timer's start is in the result: take the difference of two
 // lengths to cancel it. The receiver must be stopped (stopReceiver()); leaves the radio in standby.
