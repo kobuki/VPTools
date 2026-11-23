@@ -7,6 +7,8 @@
 // on its own clock (c0, with a fixed correction p). A Moteino's ceramic resonator is too far off and drifts
 // with temperature, so with c1 the board measures its clock against the RFM69's crystal every CAL_PERIOD_S,
 // using the RFM69's RX timeout (see DavisRFM69::timeRxTimeout()), and corrects the interval with that.
+// A calibration is a burst of CAL_BURST measurements, each a long timeout in one transmit gap and a short one in
+// the next; their difference cancels the RFM69's start-up delay. The median of the burst is applied.
 //
 // Hardware (Moteino or compatible ATmega328P with an RFM69):
 //   anemometer reed switch between WIND_PIN (INT1) and GND
@@ -16,8 +18,9 @@
 // Output: T lines for transmitted packets, as RXTX's:
 //   T <channel> <10 bytes> <interval> <target> <timing ppm> <calibrations> <rejects> 0.0
 // where interval is the transmit interval that just ended and target the one it was scheduled for (micros),
-// and K lines for clock calibrations (c1):
-//   K <long us> <short us> <measured ppm> <timing ppm> <ok|reject|fail>
+// where calibrations counts the calibration bursts and rejects the failed measurements, and with c1
+//   K <long us> <short us> <measured ppm|fail>          for each measurement
+//   C <median ppm|fail> <measurements> <timing ppm>     at the end of each calibration burst
 //
 // Commands (end with CR or LF; settings take effect at once, e saves them to EEPROM), as RXTX's:
 //   m<0..8>     band: 0 US, 1 EU, 2 AU, 3 NZ, 4 JP, 5 IN, 6 R2, 7 RU, 8 TW (the Davis firmware's band numbers)
@@ -64,13 +67,15 @@
 
 // ----- Clock calibration (c1) -----
 
-#define CAL_PERIOD_S 60       // seconds between calibrations
-#define CAL_BITRATE 9800      // RFM69 bitrate register: bit time 306.25 us, timeout unit 4.9 ms
-#define CAL_N_LONG 255        // 1.2495 s
-#define CAL_N_SHORT 63        // 0.3087 s; the difference, 0.9408 s, is the measured span
-#define CAL_GATE (200L * TX_PPM_ONE)  // once settled, measurements further than this from the estimate are rejected
-#define CAL_REJECT_RUN 3      // this many rejects in a row mean the estimate itself is wrong: start over
-#define CAL_SLOW 4            // after the first measurement each one moves the estimate 1/CAL_SLOW of the way
+#ifndef CAL_PERIOD_S
+#define CAL_PERIOD_S 1800     // seconds between calibration bursts; 0 = continuously (testing)
+#endif
+#define CAL_BURST 4           // measurements per calibration; their median is applied
+#define CAL_BITRATE 17256     // RFM69 bitrate register: bit time 539.25 us, timeout unit 8.628 ms
+#define CAL_N_LONG 255        // 2.200140 s, fits in the shortest transmit gap (ID 1, 2.5625 s)
+#define CAL_N_SHORT 8         // 0.069024 s; the difference, 2.131116 s, is the measured span
+#define CAL_MAX_PPM 1000      // a measurement further off is a failure, not the board's clock
+#define CAL_MAX_FAILS 8       // a burst is given up after this many failed measurements
 
 #define S_OK true
 #define S_ERR false
@@ -142,14 +147,18 @@ volatile bool txReport = false;
 volatile byte txPacket[DAVIS_PACKET_LEN];
 volatile byte txChannel;
 volatile uint32_t txInterval, txTarget;
-volatile int32_t txPpm;
+volatile int16_t txPpm;
 
 // clock calibration
-int32_t calPpm;            // estimate of this board's clock against the RFM69's, 1/16 ppm
-uint16_t calSamples = 0;
-uint16_t calRejects = 0;
-byte calRejectRun = 0;     // rejects in a row; after CAL_REJECT_RUN the estimate starts over
-uint32_t lastCal;          // millis
+int16_t calPpm = 0;        // this board's clock against the RFM69's crystal, 1/16 ppm
+uint16_t calBursts = 0;    // calibrations applied
+uint16_t calFails = 0;     // failed measurements
+byte calPhase = 0;         // 0 idle, odd: long timeout next, even: short timeout next
+byte calN;                 // measurements in the running burst
+byte calBurstFails;        // failed measurements in the running burst
+int16_t calVals[CAL_BURST];
+uint32_t calLong;          // the long timeout of the running measurement, micros
+uint32_t lastCal;          // end of the last burst, millis
 
 // non-blocking LED blink, switched off from loop()
 uint32_t ledOn, ledMs;
@@ -191,8 +200,8 @@ void loop() {
     printTPacket();
     blink(LED_TX_MS);
     windRead = false;
-    // right after a transmission there is time for a calibration before the next one
-    if (cfg.learn && millis() - lastCal >= CAL_PERIOD_S * 1000UL) calibrate();
+    // right after a transmission there is time for one timeout before the next one
+    if (cfg.learn) calibrate();
   }
   if (!windRead && cfg.txId > 0 && radio.txTimeLeft() < WIND_LEAD_US) {
     readWind();
@@ -221,9 +230,11 @@ void startRadio() {
   radio.stopReceiver();  // transmitter only, the radio sleeps between packets
   radio.setHighPower(cfg.highPower);
   radio.setTxFrame(cfg.frame);
-  if (cfg.learn) {
-    calSamples = calRejects = calRejectRun = 0;
-    calibrate();  // before the transmitter starts, so the first intervals are right already
+  if (cfg.learn && calBursts == 0) {
+    // a whole burst before the transmitter starts, so the first intervals are right already.
+    // A band or ID change keeps the calibration: it doesn't depend on them
+    calPhase = 0;
+    do calibrate(); while (calPhase != 0 || (calBursts == 0 && calBurstFails < CAL_MAX_FAILS));
   }
   applyTiming();
   if (cfg.txId > 0) radio.enableTx(preparePacket, cfg.txId - 1);
@@ -235,48 +246,88 @@ void restartRadio() {
 }
 
 void applyTiming() {
-  radio.setTxTiming(false, (cfg.learn ? calPpm : 0) + (int32_t)cfg.ppm * TX_PPM_ONE);
+  int32_t ppm = (cfg.learn ? calPpm : 0) + (int32_t)cfg.ppm * TX_PPM_ONE;
+  radio.setTxTiming(false, constrain(ppm, -TX_PPM_MAX, TX_PPM_MAX));
 }
 
 // ----- Clock calibration -----
 
-// Two RX timeouts of different length: the difference cancels the RFM69's start-up delay.
+// One step of a calibration burst: a long or a short timeout, whichever is next. A burst starts when
+// CAL_PERIOD_S has passed since the last one, or right away while there is no calibration yet.
 // This board's clock is fast by ppm if it counts more micros than the crystal's span; the transmit
 // interval then needs that many more micros.
 void calibrate() {
-  lastCal = millis();
-  uint32_t tl = radio.timeRxTimeout(CAL_BITRATE, CAL_N_LONG);
-  uint32_t ts = tl ? radio.timeRxTimeout(CAL_BITRATE, CAL_N_SHORT) : 0;
-  radio.sleep();
-  int32_t ppm = 0;
-  const __FlashStringHelper *result;
-  if (tl == 0 || ts == 0 || ts >= tl) {
-    result = F("fail");
-  } else {
-    int32_t span = (int32_t)(CAL_N_LONG - CAL_N_SHORT) * CAL_BITRATE / 2;
-    ppm = (int64_t)((int32_t)(tl - ts) - span) * 16000000LL / span;
-    if (calSamples > 0 && abs(ppm - calPpm) > CAL_GATE && ++calRejectRun < CAL_REJECT_RUN) {
-      if (calRejects < 0xffff) calRejects++;
-      result = F("reject");
-    } else {
-      if (calRejectRun >= CAL_REJECT_RUN) calSamples = 0;
-      calRejectRun = 0;
-      calPpm = calSamples == 0 ? ppm : calPpm + (ppm - calPpm) / CAL_SLOW;
-      if (calSamples < 0xffff) calSamples++;
-      applyTiming();
-      result = F("ok");
-    }
+  if (calPhase == 0) {
+    if (calBursts > 0 && millis() - lastCal < CAL_PERIOD_S * 1000UL) return;
+    calPhase = 1;
+    calN = calBurstFails = 0;
   }
+  if (calPhase & 1) {
+    calLong = radio.timeRxTimeout(CAL_BITRATE, CAL_N_LONG);
+    radio.sleep();
+    if (calLong == 0) {
+      calFailed(0, 0);
+      return;
+    }
+    calPhase++;
+    return;
+  }
+
+  uint32_t ts = radio.timeRxTimeout(CAL_BITRATE, CAL_N_SHORT);
+  radio.sleep();
+  const int32_t span = (int32_t)(CAL_N_LONG - CAL_N_SHORT) * CAL_BITRATE / 2;
+  int32_t ppm = (ts == 0 || ts >= calLong) ? 0 : (int64_t)((int32_t)(calLong - ts) - span) * 16000000LL / span;
+  if (ts == 0 || ts >= calLong || abs(ppm) > CAL_MAX_PPM * TX_PPM_ONE) {
+    calFailed(calLong, ts);
+    return;
+  }
+  calVals[calN++] = ppm;
+  calPhase++;
+  printK(calLong, ts);
+  Serial.println(ppm / (float)TX_PPM_ONE, 1);
+  if (calN >= CAL_BURST) calFinish();
+}
+
+// a failed measurement is repeated, until the burst has too many
+void calFailed(uint32_t tl, uint32_t ts) {
+  if (calFails < 0xffff) calFails++;
+  calBurstFails++;
+  calPhase = 1;
+  printK(tl, ts);
+  Serial.println(F("fail"));
+  if (calBurstFails >= CAL_MAX_FAILS) calFinish();
+}
+
+// apply the median of the burst
+void calFinish() {
+  for (byte i = 1; i < calN; i++) {  // insertion sort
+    int16_t v = calVals[i];
+    byte j = i;
+    for (; j > 0 && calVals[j - 1] > v; j--) calVals[j] = calVals[j - 1];
+    calVals[j] = v;
+  }
+  bool ok = calN >= CAL_BURST / 2 + 1;
+  if (ok) {
+    calPpm = calN & 1 ? calVals[calN / 2] : (calVals[calN / 2 - 1] + calVals[calN / 2]) / 2;
+    if (calBursts < 0xffff) calBursts++;
+    applyTiming();
+  }
+  calPhase = 0;
+  lastCal = millis();
+  Serial.print(F("C "));
+  if (ok) Serial.print(calPpm / (float)TX_PPM_ONE, 1); else Serial.print(F("fail"));
+  Serial.print(' ');
+  Serial.print(calN);
+  Serial.print(' ');
+  Serial.println(radio.txPpm() / (float)TX_PPM_ONE, 1);
+}
+
+void printK(uint32_t tl, uint32_t ts) {
   Serial.print(F("K "));
   Serial.print(tl);
   Serial.print(' ');
   Serial.print(ts);
   Serial.print(' ');
-  Serial.print(ppm / (float)TX_PPM_ONE, 1);
-  Serial.print(' ');
-  Serial.print(calPpm / (float)TX_PPM_ONE, 1);
-  Serial.print(' ');
-  Serial.println(result);
 }
 
 // ----- Wind -----
@@ -377,7 +428,7 @@ void printTPacket() {
   memcpy(p, (void *)txPacket, DAVIS_PACKET_LEN);
   byte ch = txChannel;
   uint32_t interval = txInterval, target = txTarget;
-  int32_t ppm = txPpm;
+  int16_t ppm = txPpm;
   txReport = false;
   interrupts();
   uint16_t crc = radio.crc16_ccitt(p, 6);
@@ -395,9 +446,9 @@ void printTPacket() {
   Serial.print(' ');
   Serial.print(ppm / (float)TX_PPM_ONE, 1);
   Serial.print(' ');
-  Serial.print(calSamples);
+  Serial.print(calBursts);
   Serial.print(' ');
-  Serial.print(calRejects);
+  Serial.print(calFails);
   Serial.println(F(" 0.0"));
 }
 

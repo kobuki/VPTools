@@ -211,7 +211,7 @@ void DavisRFM69::handleTxInt() {
 // at 16 MHz, ~48 ppm of an interval), so the remainder carries over and the steps average out to the exact target.
 // Called from the Timer1 ISR at BOTTOM: ICR1 isn't double buffered, but the counter is far below any new TOP.
 void DavisRFM69::scheduleTx() {
-  int32_t corr16 = (int64_t)txDelay * txPpm() / 1000000;  // txDelay * ppm, in 1/16 us; a resonator can be 5000 ppm off
+  int32_t corr16 = (int32_t)(txDelay / 100) * txPpm() / 10000;  // txDelay * ppm, in 1/16 us
   int32_t target16 = (int32_t)txDelay * 16 + corr16;
   txLastTarget = txNextTarget;
   txNextTarget = target16 / 16;
@@ -1013,7 +1013,7 @@ void DavisRFM69::setTimeBase(uint32_t value)
   timeBase = value;
 }
 
-void DavisRFM69::setTxTiming(bool learn, int32_t ppm)
+void DavisRFM69::setTxTiming(bool learn, int16_t ppm)
 {
   noInterrupts();
   txLearn = learn;
@@ -1040,7 +1040,7 @@ uint32_t DavisRFM69::txTimeLeft()
 uint32_t DavisRFM69::timeRxTimeout(uint16_t bitrate, byte n)
 {
   uint32_t expected = (uint32_t)n * bitrate / 2;
-  uint32_t limit = expected + expected / 50 + 5000;  // a resonator is within 0.5 %
+  uint32_t limit = expected + expected / 1000 + 5000;  // the board's clock is within 1000 ppm
   if (rxOn || n == 0) return 0;
   if (txCallback != NULL && txTimeLeft() < limit + 20000) return 0;
 
