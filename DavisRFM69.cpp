@@ -928,7 +928,9 @@ void DavisRFM69::rcCalibration()
 
 void DavisRFM69::setBand(byte newBand)
 {
+  if (newBand >= FREQ_BAND_COUNT) return;
   band = newBand;
+  discChannel %= getBandTabLength();  // the bands have 2 to 51 channels, keep it inside the new table
 }
 
 void DavisRFM69::setBandwidth(byte bw)

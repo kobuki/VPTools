@@ -2,6 +2,15 @@
 
 The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`).
 
+## v2026112301, 2026-11-23
+
+- **Refined old frequency tables and added five new bands:** Japan (`m4`, 16 channels), India (`m5`, 19), a second Russian variant (`m6`, 2), Russia (`m7`, 5) and Taiwan (`m8`, 19), with the constants `FREQ_BAND_JP`, `FREQ_BAND_IN`, `FREQ_BAND_R2`, `FREQ_BAND_RU` and `FREQ_BAND_TW`.
+- **Band numbers follow the Davis numbering.** The `m` codes of WxReceiver and RXTX and the `FREQ_BAND_*` values are now Davis' band numbers, 0 to 8 (as used in the BAND command through console or Envoy serial), so NZ moved from `m5` to `m3`; `m5` is now India.
+  - `FREQ_BAND_EU` is now 1 and `FREQ_BAND_AU` 2 (they were 2 and 1). Code using the names needs no change.
+- **`setBand()` keeps the discovery channel inside the band's table.** The discovery channel started at index 2, past the end of the 2-channel table. Invalid band numbers are ignored.
+
+RXTX reports the same version, v2026112301.
+
 ## v2026111401, 2026-11-14 (cb211a9)
 
 - **BMP388 oversampling and IIR filter now take effect.** The sketch set 8x temperature and 4x pressure oversampling and IIR filter coefficient 3 before `begin()`, which resets all three to off, so the sensor always ran without them. They are now set after `begin_I2C()`. Before the fix, pressure readings 30 s apart on one receiver differed by 0.08 hPa rms, and by up to 0.22 hPa.

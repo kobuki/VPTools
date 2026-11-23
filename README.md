@@ -1,6 +1,6 @@
 # VPTools
 
-VPTools is a Davis(TM) weather station compatible transceiver library. It can receive from multiple RF transmitters (ISS, ATK, etc.) It tries to serve as a basis for similar hobby projects. Example sketches provide simple, parseable and RAW packet output among others. The receiver library is extensively tested on the EU and US bands (as of Nov. 2026). Other bands (AU, NZ) will probably work but not tested by the author, lacking equipment on those bands.
+VPTools is a Davis(TM) weather station compatible transceiver library. It can receive from multiple RF transmitters (ISS, ATK, etc.) It tries to serve as a basis for similar hobby projects. Example sketches provide simple, parseable and RAW packet output among others. The receiver library is extensively tested on the EU and US bands (as of Nov. 2026), and checked on air on the AU and NZ bands. It supports all 9 frequency bands of the current Davis firmware of the Envoy.
 
 ## Examples
 

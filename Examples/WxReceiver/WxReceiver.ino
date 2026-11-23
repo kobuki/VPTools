@@ -49,7 +49,7 @@
 #define BMP388_CONV_TIME 40 // ms, a forced conversion with 8x temperature and 4x pressure oversampling takes up to 24 ms
 #endif
 
-#define NAME_VERSION F("WxReceiver v2026111401")
+#define NAME_VERSION F("WxReceiver v2026112301")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -463,6 +463,7 @@ void cmdOutput(char *s)
 
 void cmdMode(char *s)
 {
+  // the m codes are the Davis firmware's band numbers, as are the FREQ_BAND_* values
   switch (s[0]) {
     case '0':
       cfgBand = FREQ_BAND_US;
@@ -476,9 +477,29 @@ void cmdMode(char *s)
       cfgBand = FREQ_BAND_AU;
       printStatusF(S_OK, F("band AU"));
       break;
-    case '5':
+    case '3':
       cfgBand = FREQ_BAND_NZ;
       printStatusF(S_OK, F("band NZ"));
+      break;
+    case '4':
+      cfgBand = FREQ_BAND_JP;
+      printStatusF(S_OK, F("band JP"));
+      break;
+    case '5':
+      cfgBand = FREQ_BAND_IN;
+      printStatusF(S_OK, F("band IN"));
+      break;
+    case '6':
+      cfgBand = FREQ_BAND_R2;
+      printStatusF(S_OK, F("band R2"));
+      break;
+    case '7':
+      cfgBand = FREQ_BAND_RU;
+      printStatusF(S_OK, F("band RU"));
+      break;
+    case '8':
+      cfgBand = FREQ_BAND_TW;
+      printStatusF(S_OK, F("band TW"));
       break;
     default:
       printStatusF(S_ERR);

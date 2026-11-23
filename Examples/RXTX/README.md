@@ -19,7 +19,7 @@ Each setting takes effect at once and is echoed in the status line, but it is **
 
 | Command | Default | Meaning |
 |---|---|---|
-| `m<0\|1\|2\|5>` | `m1` | Band: 0 US, 1 EU, 2 AU, 5 NZ. |
+| `m<0..8>` | `m1` | Band: 0 US, 1 EU, 2 AU, 3 NZ, 4 JP, 5 IN, 6 R2, 7 RU, 8 TW. |
 | `t<mask>` | `t3` | Stations to receive, as a bit mask: bit 0 = ID 1 … bit 7 = ID 8. `t3` = IDs 1 and 2. |
 | `i<0..8>` | `i3` | Transmitter ID to send as. `i0` switches the transmitter off, so the board only receives. |
 | `x<raw>` | `x190` | RSSI threshold, raw value (dBm × −2): 190 = −95 dBm. |
@@ -118,7 +118,7 @@ The fields are the channel, the 10 bytes sent, the transmit interval that just e
 
 Tested with a Davis Envoy (VP2 firmware 3.15) and real Davis transmitters:
 
-- **Reception:** once locked, the Envoy received RXTX as reliably as a real transmitter, on the EU and US bands.
+- **Reception:** once locked, the Envoy received RXTX as reliably as a real transmitter, tested on bands: EU, US, AU, NZ.
 - **Timing:** the learned timing was stable, and the mean transmit interval was within 0.2 ppm of its target.
 - **SDR check:** RXTX's frequency was within 0.5 kHz of the real transmitter, with the same hop order and interval jitter below 0.1 ms. With `g1` the lead, preamble and deviation match a Davis transmitter.
 
@@ -127,4 +127,4 @@ Tested with a Davis Envoy (VP2 firmware 3.15) and real Davis transmitters:
 - Each transmission blocks reception for about 10 ms.
 - Timing and frequency correction need at least one real transmitter to be received. Without one, timing stays at `p` and the frequency at the table.
 - The console or Envoy may need minutes to acquire, depending on the ID (see above).
-- AU and NZ band operation hasn't been tested.
+- The IN, JP, R2, RU and TW bands haven't been tested on air.

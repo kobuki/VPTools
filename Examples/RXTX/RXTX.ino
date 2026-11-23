@@ -14,7 +14,7 @@
 // where interval is the transmit interval that just ended and target the one it was scheduled for (micros).
 //
 // Commands (end with CR or LF; settings take effect at once, e saves them to EEPROM):
-//   m<0|1|2|5>  band: US, EU, AU, NZ
+//   m<0..8>     band: 0 US, 1 EU, 2 AU, 3 NZ, 4 JP, 5 IN, 6 R2, 7 RU, 8 TW (the Davis firmware's band numbers)
 //   t<mask>     stations to receive: bit 0 = ID 1 ... bit 7 = ID 8
 //   i<0..8>     transmitter ID to send as, 0 = transmitter off (receive only)
 //   x<raw>      RSSI threshold, raw (190 = -95 dBm)
@@ -40,7 +40,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112105")
+#define NAME_VERSION F("RXTX v2026112301")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes
@@ -171,12 +171,7 @@ void setDefaults() {
 }
 
 byte band(byte raw) {
-  switch (raw) {
-    case 0: return FREQ_BAND_US;
-    case 2: return FREQ_BAND_AU;
-    case 5: return FREQ_BAND_NZ;
-    default: return FREQ_BAND_EU;
-  }
+  return raw < FREQ_BAND_COUNT ? raw : FREQ_BAND_EU;  // the m codes are the Davis firmware's band numbers, as are the FREQ_BAND_* values
 }
 
 void startRadio() {
@@ -376,7 +371,7 @@ void command(char *s) {
 
   switch (s[0]) {
     case 'm':
-      if (!num || !(v == 0 || v == 1 || v == 2 || v == 5)) break;
+      if (!num || v < 0 || v >= FREQ_BAND_COUNT) break;
       cfg.bandRaw = v;
       restartRadio();
       cmdShow();
