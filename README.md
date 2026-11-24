@@ -26,5 +26,6 @@ The AnemometerTX sketch is a simple anemometer transmitter for Davis anemometers
 
 ### Notes
 
+- The library version is `VPTOOLS_VERSION` in `DavisRFM69.h`; the example sketches print it at startup after their own version. Changes are listed in the library [CHANGELOG](CHANGELOG.md) and in each example's own changelog.
 - Some parts were originally based on [code by DeKay](https://github.com/dekay/DavisRFM69) - for technical details on packet formats, etc. see his (now outdated) [wiki](https://github.com/dekay/DavisRFM69/wiki) and the source code of this repo.
 - From October 2026 onward, Claude Code was used to assist in coding and the rigorous testing required to bring these solutions alive.
