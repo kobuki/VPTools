@@ -51,7 +51,7 @@
 
 #include "DavisRFM69.h"
 
-#define NAME_VERSION F("AnemometerTX v2026112401")
+#define NAME_VERSION F("AnemometerTX v2026112402")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x4154  // change when Config changes
@@ -468,6 +468,7 @@ void preparePacket(byte *packet) {
     packet[4] = 0x01;
     packet[5] = gustInfo;
   }
+  packet[4] &= ~VP2_BYTE4_NO_WIND;  // the anemometer is there
   packet[6] = packet[7] = 0;
   packet[8] = packet[9] = 0xff;
 

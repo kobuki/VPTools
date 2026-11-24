@@ -2,6 +2,10 @@
 
 The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the main [CHANGELOG](../../CHANGELOG.md) under the WxReceiver versions.
 
+## v2026112402, 2026-11-24
+
+- **Bit 2 of byte 4 ("no anemometer") follows the wind source:** cleared while the wind source is fresh, set while there is no wind. The "no sensor" values of the UV and solar packets (`FF C5 00`) set it, so a receiver dropped the wind on those packets: it showed no wind speed and direction until the next packet.
+
 ## v2026112401, 2026-11-24
 
 - No functional change. The VP2 packet type sequence and the "no sensor" values moved to `DavisRFM69.h` (`VP2_TX_SEQ`, `VP2_NO_SENSOR`), shared with AnemometerTX.

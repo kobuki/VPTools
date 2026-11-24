@@ -2,10 +2,14 @@
 
 The entries follow the version string the sketch prints at startup (`# AnemometerTX vYYYYMMDDNN ...`).
 
+## v2026112402, 2026-11-24
+
+- **Receivers no longer drop the wind on the UV and solar packets.** Their "no sensor" values (`FF C5 00`) have bit 2 of byte 4 set, which means "no anemometer": a receiver showed no wind speed and direction until the next packet. The bit is now cleared in all packets.
+
 ## v2026112401, 2026-11-24
 
-- **Gust packets carry the 10-minute gust,** as the ISS sends it: byte 3 the highest wind speed in the last 10 gust periods (the 20-packet sequence, 51–60 s depending on the ID), byte 5 its age in gust periods (upper nibble) and its direction in 16 sectors (lower nibble), byte 4 = 1. The format was worked out from a day of a real ISS's packets: the direction nibble is `(dir + 8) >> 4` of the gust's reading in all 894 gust packets, and a speed drops out of the window after 10 gust periods. They were sent with the "no sensor" values.
-- **Contact bounce when the switch opens no longer counts as a rotation.** The debounce only ignored edges within 5 ms of the previous closure, so chatter at the end of a longer closure doubled the speed (10 mph read as 19–21 on the bench). Now both edges interrupt, and a rotation is the first edge after the switch has rested open for 5 ms.
+- **Gust packets carry the 10-minute gust,** as the ISS sends it: byte 3 the highest wind speed in the last 10 gust periods (the 20-packet sequence, 51–60 s depending on the ID), byte 5 its age in gust periods (upper nibble) and its direction in 16 sectors (lower nibble), byte 4 = 1. The direction sector is `(dir + 8) >> 4` of the raw direction. They were sent with the "no sensor" values.
+- **Contact bounce when the switch opens no longer counts as a rotation.** The debounce only ignored edges within 5 ms of the previous closure, so chatter at the end of a longer closure could double the speed. Now both edges interrupt, and a rotation is the first edge after the switch has rested open for 5 ms.
 - **Build option `-DWIND_GATE_US=2250000`:** wind speed as the ISS measures it, the rotations counted in a 2.25 s gate that ends before each transmission (1 rotation = 1 mph). The default is still the mean over all rotations since the previous packet.
 - The VP2 packet type sequence and the "no sensor" values moved to `DavisRFM69.h` (`VP2_TX_SEQ`, `VP2_NO_SENSOR`), shared with RXTX.
 

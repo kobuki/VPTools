@@ -40,7 +40,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112401")
+#define NAME_VERSION F("RXTX v2026112402")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes
@@ -242,6 +242,8 @@ void preparePacket(byte *packet) {
   Slot *s = &slots[type];
   for (byte i = 0; i < 3; i++) packet[3 + i] = fresh(s, now) ? s->v[i] : VP2_NO_SENSOR[type][i];
   if (fresh(s, now)) batt |= s->batt;
+  if (fresh(&wind, now)) packet[4] &= ~VP2_BYTE4_NO_WIND;  // the receiver ignores the wind while this is set
+  else packet[4] |= VP2_BYTE4_NO_WIND;
   packet[0] = (type << 4) | (batt ? 8 : 0) | radio.txId;
   packet[6] = packet[7] = 0;
   packet[8] = packet[9] = 0xff;
