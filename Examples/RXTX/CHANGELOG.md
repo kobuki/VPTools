@@ -2,6 +2,10 @@
 
 The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the main [CHANGELOG](../../CHANGELOG.md) under the WxReceiver versions.
 
+## v2026112403, 2026-11-24
+
+- **Fixed: byte 4's wind bits come from the wind source.** Bit 1 is the lowest bit of the 9-bit wind direction, bit 2 means no anemometer. Both were taken from each packet type's own source: when that wasn't the wind source, a receiver's wind direction could be off by one step (about 0.7°), and a wind source without an anemometer was sent as calm instead of as no wind.
+
 ## v2026112402, 2026-11-24
 
 - **Bit 2 of byte 4 ("no anemometer") follows the wind source:** cleared while the wind source is fresh, set while there is no wind. The "no sensor" values of the UV and solar packets (`FF C5 00`) set it, so a receiver dropped the wind on those packets: it showed no wind speed and direction until the next packet.

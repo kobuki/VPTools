@@ -631,8 +631,12 @@ static const byte VP2_TX_SEQ[20] =
   VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_SOLAR
 };
 
-// Byte 4, bit 2 (all VP2 packet types): no anemometer. A receiver ignores the wind of a packet with this bit set
-// and shows no wind speed and direction until the next packet. An ISS with an anemometer never sets it.
+// Wind bits in byte 4 of the VP2 packet types in VP2_BYTE4_WIND_TYPES (bit n set = type n: 4, 5, 6, 8, 9, A, C, E):
+// - bit 1 is the lowest bit of the 9-bit wind direction (byte 2 holds the upper 8 bits)
+// - bit 2 means no anemometer: a receiver ignores the wind of the packet and shows no wind speed and direction
+//   until the next packet. An ISS with an anemometer never sets it.
+#define VP2_BYTE4_WIND_TYPES 0x5770
+#define VP2_BYTE4_WIND_DIR_LSB 0x02
 #define VP2_BYTE4_NO_WIND 0x04
 
 // "No sensor" values of bytes 3..5 for each VP2 packet type, as an ISS with nothing connected sends them: the
