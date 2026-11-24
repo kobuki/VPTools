@@ -54,7 +54,7 @@
 
 #include "DavisRFM69.h"
 
-#define NAME_VERSION F("AnemometerTX v2026112403")
+#define NAME_VERSION F("AnemometerTX v2026112404")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x4154  // change when Config changes
@@ -188,6 +188,7 @@ void setup() {
   if (!loaded) setDefaults();
   Serial.print(F("# "));
   Serial.print(NAME_VERSION);
+  Serial.print(F(" (VPTools " VPTOOLS_VERSION ")"));
   Serial.println(loaded ? F(" settings from EEPROM") : F(" default settings"));
 #ifdef WIND_GATE_US
   Serial.print(F("# wind speed: rotations in a gate of "));

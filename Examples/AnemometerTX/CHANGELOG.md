@@ -1,6 +1,10 @@
 # AnemometerTX changelog
 
-The entries follow the version string the sketch prints at startup (`# AnemometerTX vYYYYMMDDNN ...`).
+The entries follow the version string the sketch prints at startup (`# AnemometerTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the [library CHANGELOG](../../CHANGELOG.md).
+
+## v2026112404, 2026-11-24
+
+- **The startup line shows the library version:** `# AnemometerTX v2026112404 (VPTools v2026112401) settings from EEPROM`.
 
 ## v2026112403, 2026-11-24
 

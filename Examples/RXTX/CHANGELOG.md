@@ -1,6 +1,10 @@
 # RXTX changelog
 
-The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the main [CHANGELOG](../../CHANGELOG.md) under the WxReceiver versions.
+The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the [library CHANGELOG](../../CHANGELOG.md).
+
+## v2026112404, 2026-11-24
+
+- **The startup line shows the library version:** `# RXTX v2026112404 (VPTools v2026112401) settings from EEPROM`.
 
 ## v2026112403, 2026-11-24
 
@@ -21,7 +25,7 @@ The entries follow the version string the sketch prints at startup (`# RXTX vYYY
 ## v2026112301, 2026-11-23 (716de69)
 
 - **`m` takes the Davis firmware's band numbers, 0 to 8:** 0 US, 1 EU, 2 AU, 3 NZ, 4 JP, 5 IN, 6 R2, 7 RU, 8 TW. NZ moved from `m5` to `m3`. A board that saved `m5` starts on the India band: set `m3` and save with `e`.
-- **Frequency tables from the Davis firmware**, see the main [CHANGELOG](../../CHANGELOG.md).
+- **Frequency tables from the Davis firmware**, see the [library CHANGELOG](../../CHANGELOG.md).
 
 ## v2026112105, 2026-11-21 (40804ff)
 

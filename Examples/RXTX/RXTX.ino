@@ -40,7 +40,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112403")
+#define NAME_VERSION F("RXTX v2026112404")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes
@@ -123,6 +123,7 @@ void setup() {
   if (!loaded) setDefaults();
   Serial.print(F("# "));
   Serial.print(NAME_VERSION);
+  Serial.print(F(" (VPTools " VPTOOLS_VERSION ")"));
   Serial.println(loaded ? F(" settings from EEPROM") : F(" default settings"));
   radio.setTxTiming(cfg.learn, cfg.ppm * TX_PPM_ONE);
   startRadio();

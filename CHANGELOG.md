@@ -1,24 +1,26 @@
-# Changelog
+# DavisRFM69 library changelog
 
-The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`).
+Changes to the library: `DavisRFM69`, `PacketFifo` and `TimerOne`. The changes of the example sketches are in their own changelogs: [WxReceiver](Examples/WxReceiver/CHANGELOG.md), [RXTX](Examples/RXTX/CHANGELOG.md), [AnemometerTX](Examples/AnemometerTX/CHANGELOG.md).
 
-## Library, 2026-11-24
+The library version is `VPTOOLS_VERSION` in `DavisRFM69.h`, and the example sketches print it at startup after their own version, for example `# WxReceiver v2026112401 (VPTools v2026112401) ready to accept commands`. Before v2026112401 the library had no version string of its own; those entries are headed by the WxReceiver version that first shipped the change.
 
-WxReceiver works as in v2026112301. AnemometerTX v2026112403 and RXTX v2026112403 use these changes.
+## v2026112401, 2026-11-24
 
+- **Added: library version** `VPTOOLS_VERSION`.
 - **Added: transmitter-only mode.** `stopReceiver()` followed by `enableTx()` runs a transmitter only: the radio sleeps between packets instead of returning to RX.
 - **Added: `timeRxTimeout(bitrate, n)`** measures the board's clock against the RFM69's crystal: it times the RFM69's RX timeout of n units with `micros()`. The timeout unit is 1095 ppm longer than the 16 bit times the datasheet gives.
 - **Added: `txTimeLeft()`**, the time until the next transmission.
 - **Added: VP2 packet definitions** shared by the transmitting sketches: the ISS packet type sequence `VP2_TX_SEQ`, the "no sensor" values `VP2_NO_SENSOR`, and byte 4's wind bits `VP2_BYTE4_WIND_DIR_LSB` (lowest bit of the 9-bit wind direction) and `VP2_BYTE4_NO_WIND` (no anemometer), valid in the packet types of `VP2_BYTE4_WIND_TYPES`.
 
+Reception is unchanged from v2026112301.
+
 ## v2026112301, 2026-11-23
 
-- **Refined old frequency tables and added five new bands:** Japan (`m4`, 16 channels), India (`m5`, 19), a second Russian variant (`m6`, 2), Russia (`m7`, 5) and Taiwan (`m8`, 19), with the constants `FREQ_BAND_JP`, `FREQ_BAND_IN`, `FREQ_BAND_R2`, `FREQ_BAND_RU` and `FREQ_BAND_TW`.
-- **Band numbers follow the Davis numbering.** The `m` codes of WxReceiver and RXTX and the `FREQ_BAND_*` values are now Davis' band numbers, 0 to 8 (as used in the BAND command through console or Envoy serial), so NZ moved from `m5` to `m3`; `m5` is now India.
-  - `FREQ_BAND_EU` is now 1 and `FREQ_BAND_AU` 2 (they were 2 and 1). Code using the names needs no change.
+- **Refined old frequency tables and added five new bands:** Japan (16 channels), India (19), a second Russian variant (2), Russia (5) and Taiwan (19), with the constants `FREQ_BAND_JP`, `FREQ_BAND_IN`, `FREQ_BAND_R2`, `FREQ_BAND_RU` and `FREQ_BAND_TW`.
+- **Band numbers follow the Davis numbering.** The `FREQ_BAND_*` values are now Davis' band numbers, 0 to 8 (as used in the BAND command through console or Envoy serial). `FREQ_BAND_EU` is now 1 and `FREQ_BAND_AU` 2 (they were 2 and 1), and `FREQ_BAND_NZ` is 3. Code using the names needs no change.
 - **`setBand()` keeps the discovery channel inside the band's table.** The discovery channel started at index 2, past the end of the 2-channel table. Invalid band numbers are ignored.
 
-Library changes for transmitting, used by RXTX:
+Changes for transmitting, used by RXTX:
 
 - **Added: transmit timing follows the received stations** (`setTxTiming()`, `txPpm()`): the board measures the stations' intervals with its own clock and runs its transmit interval with the same perceived error. The Timer1 period is dithered, so the mean interval hits the target.
 - **Added: transmit frequency correction** (`setTxAfc()`): the transmit frequency is shifted by the offset the software AFC learned on the received stations.
@@ -27,15 +29,6 @@ Library changes for transmitting, used by RXTX:
 - **Fixed:** a restart (`initialize()`, `setStations()`) kept the count of found stations, so after a band or station change at run time, discovery never ran again.
 - **Fixed:** after a transmission the receiver returned to channel 0 of an untracked station instead of the channel it was on.
 - **Fixed:** `enableTx()` sent an extra packet right away when a Timer1 overflow was pending.
-
-RXTX reports the same version, v2026112301.
-
-## v2026111401, 2026-11-14 (cb211a9)
-
-- **BMP388 oversampling and IIR filter now take effect.** The sketch set 8x temperature and 4x pressure oversampling and IIR filter coefficient 3 before `begin()`, which resets all three to off, so the sensor always ran without them. They are now set after `begin_I2C()`. Before the fix, pressure readings 30 s apart on one receiver differed by 0.08 hPa rms, and by up to 0.22 hPa.
-- **BMP388 readings are current.** The library's `performReading()` starts a forced conversion but reads the result registers straight away, so each reading returned the conversion started 30 s earlier. The sketch now starts a conversion, waits 40 ms for it and then reads it.
-- **BME280 takes one forced measurement per reading.** The sensor now sleeps between readings. Before, it ran in normal mode, and after each reading the sketch wrote 0 to `ctrl_meas`, potentially blocking measurements.
-- **Sensor libraries updated.** Adafruit BMP3XX 2.x is now required. It also supports the BMP390, which 1.x rejects by its chip ID. SparkFun BME280 2.x is now required. It reads the H6 humidity calibration value as signed (1.x read it as unsigned, giving wrong humidity on chips where it is negative) and reads each value in one burst.
 
 ## v2026110601, 2026-11-06 (f21d50d)
 
@@ -50,7 +43,7 @@ RXTX reports the same version, v2026112301.
 - **Foreign packets no longer hijack a tracked station.** A foreign or noise packet that passes the Davis CRC by chance and carries a configured station's ID used to re-anchor that station's timing and hop channel. The receiver then ran out of step until it resynced, which took minutes. Now such a packet is rejected when either check fails:
   - **Trailer check:** a non-repeater packet must end in `FF FF`, allowing at most 2 bit errors (`TRAILER_MAX_ZERO_BITS`).
   - **Early-arrival check:** a packet arriving more than 20 ms early (`EARLY_PACKET_THRESH`) for each interval since the station was last heard is not accepted. Clock error between receiver and transmitter builds up with every missed interval, so the limit grows with misses. It tolerates up to about 0.8% clock error, which covers a ceramic resonator.
-- **Repeater handling simplified.** The unused per-station `repeaterId` is gone. A packet that passes only the repeater CRC is now accepted only with repeater pass-through on (`r1`).
+- **Repeater handling simplified.** The unused per-station `repeaterId` is gone. A packet that passes only the repeater CRC is now accepted only with repeater pass-through on.
 
 ## v2026103101, 2026-10-31 (d34725d)
 
@@ -75,18 +68,12 @@ RXTX reports the same version, v2026112301.
 
 ## v2026102801, 2026-10-28 (b9e0b67 … 379940b, b0bb4fd)
 
-This is the first version change since v2019122001. It also covers two master commits that had no version bump; builds of those still report v2019122001.
+This is the first version change since v2019122001. It also covers two master commits that had no version bump.
 
 **Why software AFC:** with the AFC off, the demodulator only decodes within about ±2 kHz of the transmitter: partly at ±4 kHz, not at all at ±6 kHz. A wider bandwidth doesn't help. Real offsets were much larger. The US table was 26 kHz off and the EU channels up to 14 kHz. On top of that, receiver crystals sit 5–10 kHz off, an offset that differs per board and drifts with temperature. EU reception relied on the RFM69's HW AFC, which kept it at about 98% for years. HW AFC is the AFC built into the radio chip: when a signal appears, the chip measures its frequency error and retunes itself for that packet, with no help from the firmware. The US band barely worked. With the reworked receive path, HW AFC lost packets: on one receiver it got 94% on EU and 35% on US, where the software AFC gets 99% and 98%. A fixed table can't cover per-board offsets, so the receiver measures each transmitter's offset on its preamble and follows it per station.
 
-- **Software AFC, new command `a`.** The RFM69's FEI is measured on each packet's preamble and averaged into a per-station correction. The receiver tunes with that correction whenever it expects that station. Setting values:
-  - `a0`: off, fixed frequency table;
-  - `a1`..`a50`: software AFC, correction limited to ±1..50 kHz;
-  - `ah`: the RFM69's built-in HW AFC.
-
-  The default is `a12`. The setting shows in the `?` status line, for example `# OK t3 f1 o3 m1 x200 r1 a12 running`.
-- **FEI field in the `I` output line.** The last field is now the transmitter's offset from the frequency table in kHz, as the software AFC measured it. It is 0 with the AFC off, and the raw FEI with `ah`.
-- **HW AFC is off by default.** It still acquires transmitters fastest, within seconds, but it loses more packets than the software AFC: a few percent on EU, most of them on US. A likely cause is that RSSI triggers on the unmodulated carrier leading every Davis packet, so HW AFC measures on that instead of the preamble. This is not confirmed.
+- **Software AFC** (`setAfc()`). The RFM69's FEI is measured on each packet's preamble and averaged into a per-station correction. The receiver tunes with that correction whenever it expects that station. Modes: `RF69_AFC_OFF` (fixed frequency table), 1..`RF69_AFC_MAX` (software AFC, correction limited to ±1..50 kHz) and `RF69_AFC_HW` (the RFM69's built-in HW AFC).
+- **HW AFC is no longer used by default.** It still acquires transmitters fastest, within seconds, but it loses more packets than the software AFC: a few percent on EU, most of them on US. A likely cause is that RSSI triggers on the unmodulated carrier leading every Davis packet, so HW AFC measures on that instead of the preamble. This is not confirmed.
 - **Fixed RX retuning:**
   - A new frequency now takes effect: the radio passes through SYNTH mode, because frequency changes in RX mode only apply after leaving RX.
   - The first register write after a packet (FRFMSB) is no longer swallowed by the FIFO burst; the packet handler runs after the chip select is released.
@@ -98,61 +85,39 @@ This is the first version change since v2019122001. It also covers two master co
 - **NZ frequency table hop order fixed.** It was the reverse of the transmission sequence.
 - **Wide reception bandwidth** (61e39ac, on master, 2025-02-07). It lets the receiver pick up SIM transmitters made from 2024 on.
 
-## v2019122001, 2019-12-20
-
-- BMP388 support.
-
-## v2018021601, 2018-02-16
-
-- Version bump for release.
-
 ## v2017121901, 2017-12-19
 
 - Discovery channel changed, and RX timing values tuned.
 - Fixed a mix-up between txChannel and txId in the library and the examples.
 - The RX RSSI threshold is stored and applied whenever the radio switches to RX.
-- Barometer read interval set to 30 s.
 
 ## v2017091301 / v2017091302, 2017-09-13
 
-- Repeater pass-through (`r` command) to help repeater reception. The flag also shows in the info line.
-- Transmit timing moved to a timer interrupt; the sketch fills packet data from a callback (`attachTxCallback`). Concurrent receive and transmit is possible (RXTX example, testing stage).
+- Repeater pass-through, to help repeater reception.
+- Transmit timing moved to a timer interrupt; the sketch fills packet data from a callback (`attachTxCallback`). Concurrent receive and transmit is possible.
 - 1 ms timer moved from TimerOne to MsTimer2. TimerOne now times transmissions exactly.
 - `timeBase`, to correct for crystal or resonator error.
 - More interrupt safeguards. Frequency offset correction functions, and modem parameters tuned for more robust transmitting.
 
 ## v2017061401 / v2017061601, 2017-06-14
 
-- Consecutive line-end characters are skipped by the serial command interpreter. Sources reformatted without tabs, and unused sources removed.
-
-## v2017052401 … v2017052802, 2017-05-24..28
-
-- BMP280 support, and standalone BMP180 support for temperature and humidity.
-- Each sensor chip is selectable on its own: the Si7021 is decoupled from the BMP180.
-- I2C address selection defines.
-- Fixed the emulated pressure value and the sensor output.
-
-## v2017042101, 2017-04-21
-
-- The first BME280 reading is discarded, because it can be off.
+- Sources reformatted without tabs, and unused sources removed.
 
 ## v2017021801 / v2017021901, 2017-02-18..19
 
-- BME280 support (needs the SparkFun BME280 library). The sensor sleeps after each measurement.
 - ATmega644P/1284P (Moteino Mega) and ATmega32U4 support: chip-dependent DIO0 interrupt pin and number, overridable in the constructor (GitHub issue #3).
 - Fixed a restart bug when the receiver started without stations, for example in transmit-only use (#2).
-- Fixed rain rate. `radio.initialize()` moved earlier in startup.
 
 ## v2016071301, 2016-07-13
 
-The first WxReceiver release, a receiver compatible with the weewx Meteostick driver. It was built on the 2016 library rework:
+The library rework that WxReceiver was built on:
 - All reception logic moved into the DavisRFM69 class, so it can be used as a library.
 - Stations resync individually, and a full resync happens only when all are lost.
 - Discovery searches on one channel while still tracking stations already found. Lost stations get a channel shift on resync.
 - Per-station statistics, a raw RSSI threshold helper, and handling of the repeater CRC.
 - Fixes to wind direction, wind speed error correction, rain rate and solar/UV values.
 
-## Library history before WxReceiver (2015–2016)
+## Before WxReceiver (2015–2016)
 
 - **2015-02-28:** baseline, based on DeKay's DavisRFM69. External dependencies were moved into the project.
 - **2015-04:** generic packet decoding for all packet types, Vue support, and decoded wind speed.
