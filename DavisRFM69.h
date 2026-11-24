@@ -19,6 +19,9 @@
 
 #include "PacketFifo.h"
 
+// Library version, printed by the example sketches at startup; see CHANGELOG.md
+#define VPTOOLS_VERSION "v2026112401"
+
 #define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
 #define SPI_CS               SS // SS is the SPI slave select pin, for instance D10 on atmega328
 // #define RF69_IRQ_PIN          2 // INT0 on AVRs should be connected to DIO0 (ex on Atmega328 it's D2)

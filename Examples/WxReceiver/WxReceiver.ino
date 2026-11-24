@@ -49,7 +49,7 @@
 #define BMP388_CONV_TIME 40 // ms, a forced conversion with 8x temperature and 4x pressure oversampling takes up to 24 ms
 #endif
 
-#define NAME_VERSION F("WxReceiver v2026112301")
+#define NAME_VERSION F("WxReceiver v2026112401")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200
@@ -175,6 +175,7 @@ void printBanner()
 {
   Serial.print(F("# "));
   Serial.print(NAME_VERSION);
+  Serial.print(F(" (VPTools " VPTOOLS_VERSION ")"));
   Serial.println(F(" ready to accept commands"));
   Serial.println('?');
 }
