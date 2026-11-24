@@ -11,7 +11,10 @@
 //
 // Gust packet, as the ISS sends it: byte 3 the highest wind speed in the last 10 gust periods (a gust period is
 // the 20-packet sequence), byte 5 upper nibble the age of that speed in gust periods (0..9), lower nibble its
-// direction rounded to 16 sectors, (dir + 8) >> 4; byte 4 is 1 (5 = no anemometer).
+// direction rounded to 16 sectors, (dir + 8) >> 4; byte 4 is 1 plus the wind bits (5 = no anemometer).
+//
+// Wind direction: the vane's raw 9-bit value, the upper 8 bits in byte 2 and the lowest bit in bit 1 of byte 4
+// (in every packet type whose byte 4 carries the wind bits), as an ISS sends it. 0 only in the dead zone.
 //
 // Transmit timing: a Davis receiver expects the interval (40 + ID) / 16 s. A board with a quartz crystal can run
 // on its own clock (c0, with a fixed correction p). A Moteino's ceramic resonator is too far off and drifts
@@ -51,7 +54,7 @@
 
 #include "DavisRFM69.h"
 
-#define NAME_VERSION F("AnemometerTX v2026112402")
+#define NAME_VERSION F("AnemometerTX v2026112403")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x4154  // change when Config changes
@@ -126,7 +129,8 @@ volatile bool pulseSeen = false;
 
 // wind data for the next packet, written in loop(), read in the transmit ISR
 volatile byte windSpeed = 0;      // mph
-volatile byte windDir = 0;        // raw vane value, 0 in the dead zone
+volatile byte windDir = 0;        // raw vane value, upper 8 of 9 bits, 0 in the dead zone
+volatile byte windDirLsb = 0;     // its lowest bit, sent as bit 1 of byte 4
 bool windRead = false;            // read for the coming transmission
 
 // gust: the highest speed and its 16-sector direction in each gust period, slot gustCur is the running one
@@ -381,7 +385,7 @@ void readWind() {
   interrupts();
   uint32_t mph32 = (gated * (uint32_t)(WIND_RPS_MPH * 1000000UL) + WIND_GATE_US / 2) / WIND_GATE_US;
   windSpeed = mph32 > 255 ? 255 : mph32;
-  windDir = readVane();
+  setWindDir(readVane());
   updateGust();
   return;
 #endif
@@ -396,7 +400,7 @@ void readWind() {
   if (period > 0 && since > period) period = since;  // slowing down: no pulse for longer than the last period
   uint16_t mph = period ? (uint16_t)(1000000.0 * WIND_RPS_MPH / period + 0.5) : 0;
   windSpeed = mph > 255 ? 255 : mph;
-  windDir = readVane();
+  setWindDir(readVane());
   updateGust();
 }
 
@@ -426,8 +430,14 @@ void updateGust() {
   gustMax[gustCur] = gustDir[gustCur] = 0;
 }
 
-// Raw vane value: 1..255 along the potentiometer, 0 in its dead zone (north)
-byte readVane() {
+void setWindDir(uint16_t raw9) {
+  windDir = raw9 >> 1;
+  windDirLsb = raw9 & 1;
+}
+
+// Raw vane value, 9 bits: 1..511 along the potentiometer, 0 only in its dead zone (north): receivers show 0 as
+// north, 1 as 5 degrees and 510..511 as 355 degrees
+uint16_t readVane() {
   int val, blindVal;
 
   pinMode(POT_BLIND_VCC, OUTPUT);
@@ -438,12 +448,13 @@ byte readVane() {
   digitalWrite(POT_VCC, HIGH);
   pinMode(POT_BLIND_VCC, INPUT);
   delay(ANALOG_WAIT_MS);
-  val = (analogReadAvg(POT_PIN, 4) + ANALOG_ROUNDING) >> 2;
+  int avg = analogReadAvg(POT_PIN, 4) + ANALOG_ROUNDING;
   pinMode(POT_VCC, INPUT);
+  val = avg >> 2;  // the dead zone thresholds are for 8 bits
   if ((blindVal - val > GAP_DETECT_THRESH3) || (val < GAP_DETECT_THRESH1 && blindVal > GAP_DETECT_THRESH2)) {
-    val = 0;
+    return 0;
   }
-  return val > 255 ? 255 : val;
+  return constrain(avg >> 1, 1, 511);
 }
 
 int analogReadAvg(byte port, byte n) {
@@ -468,7 +479,9 @@ void preparePacket(byte *packet) {
     packet[4] = 0x01;
     packet[5] = gustInfo;
   }
-  packet[4] &= ~VP2_BYTE4_NO_WIND;  // the anemometer is there
+  if (VP2_BYTE4_WIND_TYPES & (1 << type)) {  // the anemometer is there, and the direction's lowest bit
+    packet[4] = (packet[4] & ~(VP2_BYTE4_NO_WIND | VP2_BYTE4_WIND_DIR_LSB)) | (windDirLsb ? VP2_BYTE4_WIND_DIR_LSB : 0);
+  }
   packet[6] = packet[7] = 0;
   packet[8] = packet[9] = 0xff;
 

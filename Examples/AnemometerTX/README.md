@@ -60,7 +60,7 @@ On the console or Envoy, set up ID 2 as the station that provides wind. If the c
 - With the build option `-DWIND_GATE_US=2250000`, the speed is the number of rotations in a 2.25 s gate that ends before each transmission instead, as the ISS measures it.
 - **Contact bounce:** a rotation is the first edge after the switch has rested open for 5 ms (`DEBOUNCE_US`). Bounce when the switch closes or opens doesn't count.
 - **Speed correction:** the speed is sent raw. Consoles and receivers apply their direction-dependent speed correction themselves.
-- **Direction** is the vane's raw 8-bit value, 0 in the potentiometer's dead zone.
+- **Direction** is the vane's raw 9-bit value: the upper 8 bits in byte 2, the lowest bit in bit 1 of byte 4, as an ISS sends it. 0 only in the potentiometer's dead zone, which receivers show as north (360°).
 - **Gust:** the gust packets carry the highest speed in the last 10 gust periods (a gust period is the 20-packet sequence, 51–60 s depending on the ID), its age in gust periods and its direction in 16 sectors, as an ISS sends them. Consoles take their 10-minute gust from these packets.
 
 ## Transmit timing
@@ -101,6 +101,5 @@ Tested with a Davis Envoy (VP2 firmware 3.15):
 ## Limitations
 
 - The wind vane input hasn't been tested yet.
-- The direction is sent with 8 bits. Davis receivers decode 9 bits (the lowest one is bit 1 of byte 4), so half the possible resolution is unused.
 - The battery-low bit is never set.
 - The IN, JP, R2, RU and TW bands haven't been tested on air.

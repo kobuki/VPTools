@@ -2,12 +2,12 @@
 
 The entries follow the version string the sketch prints at startup (`# AnemometerTX vYYYYMMDDNN ...`).
 
-## v2026112402, 2026-11-24
+## v2026112403, 2026-11-24
 
 First tested release. The sketch was rewritten; compared with the legacy code:
 
 - **Commands as RXTX's,** saved to EEPROM with `e`: band `m` (the Davis band numbers 0 to 8), transmitter ID `i` (0 = off), transmit timing `c`/`p`, RFM69 module type `h`, on-air framing `g`, plus `d`, `r` and `?`. Defaults `m1 i3 c1 p0 h1 g1`.
-- **VP2 ISS packet sequence and timing:** wind speed and direction in every packet, the 10-minute gust in the gust packets, Davis' "no sensor" values in the other packet types, with byte 4's "no anemometer" bit cleared.
+- **VP2 ISS packet sequence and timing:** wind speed and the 9-bit wind direction in every packet, the 10-minute gust in the gust packets, Davis' "no sensor" values in the other packet types, with byte 4's "no anemometer" bit cleared.
 - **Gust packets as the ISS sends them:** byte 3 the highest wind speed in the last 10 gust periods (a gust period is the 20-packet sequence), byte 5 its age in gust periods (upper nibble) and its direction in 16 sectors (lower nibble, `(dir + 8) >> 4`).
 - **Wind speed** is the mean over all rotations since the previous packet, read 100 ms before each transmission; 0 when no rotation came for 2.25 s (below 1 mph); when the cups slow down, the time since the last rotation is used as the period. Build option `-DWIND_GATE_US=2250000` counts the rotations in a 2.25 s gate before each transmission instead, as the ISS does.
 - **Wind speed is sent raw.** Receivers apply the direction-dependent speed correction themselves.
