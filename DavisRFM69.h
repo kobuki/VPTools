@@ -620,6 +620,39 @@ static const uint8_t bandTabLengths[FREQ_BAND_COUNT] = {
 #define VP2P_RAIN         0xE // rain bucket tips counter
 #define VP2P_SOIL_LEAF    0xF // soil/leaf station
 
+// VP2 ISS packet type sequence (upper nibble of byte 0), repeated by the transmitter.
+// Wind speed and direction are in every packet at byte offsets 1 and 2.
+static const byte VP2_TX_SEQ[20] =
+{
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_UV,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_WINDGUST,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_HUMIDITY,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_HUMIDITY,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_SOLAR
+};
+
+// "No sensor" values of bytes 3..5 for each VP2 packet type, as an ISS sends them for an unconnected sensor;
+// the wind bytes 1 and 2 are 0 then
+static const byte VP2_NO_SENSOR[16][3] =
+{
+  { 0x00, 0x00, 0x00 },  // 0
+  { 0x00, 0x00, 0x00 },  // 1
+  { 0x00, 0x00, 0x00 },  // 2
+  { 0x00, 0x00, 0x00 },  // 3
+  { 0xff, 0xc5, 0x00 },  // 4 UV
+  { 0xff, 0x71, 0x00 },  // 5 rain rate
+  { 0xff, 0xc5, 0x00 },  // 6 solar
+  { 0x00, 0x00, 0x00 },  // 7
+  { 0xff, 0xc1, 0x00 },  // 8 temperature
+  { 0x00, 0x05, 0x00 },  // 9 gust
+  { 0x00, 0x01, 0x00 },  // A humidity
+  { 0x00, 0x00, 0x00 },  // B
+  { 0x00, 0x05, 0x00 },  // C unknown
+  { 0x00, 0x00, 0x00 },  // D
+  { 0x80, 0x01, 0x00 },  // E rain
+  { 0x00, 0x00, 0x00 },  // F
+};
+
 // Vue packet types
 #define VUEP_VCAP         0x2 // supercap voltage
 #define VUEP_UNKNOWN1     0x3 // unknown Vue packet type

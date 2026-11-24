@@ -40,7 +40,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112302")
+#define NAME_VERSION F("RXTX v2026112401")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes
@@ -69,38 +69,6 @@ struct Config {
 };
 
 Config cfg;
-
-// VP2 ISS packet type sequence (upper nibble of byte 0).
-// Wind speed and direction are in every packet at byte offsets 1 and 2.
-static const byte txseq_vp2[20] =
-{
-  0x8, 0xe, 0x5, 0x4,
-  0x8, 0xe, 0x5, 0x9,
-  0x8, 0xe, 0x5, 0xa,
-  0x8, 0xe, 0x5, 0xa,
-  0x8, 0xe, 0x5, 0x6
-};
-
-// "No sensor" values of bytes 3..5 for each packet type; wind (bytes 1, 2) is 0 0
-static const byte noSensor[16][3] =
-{
-  { 0x00, 0x00, 0x00 },  // 0
-  { 0x00, 0x00, 0x00 },  // 1
-  { 0x00, 0x00, 0x00 },  // 2
-  { 0x00, 0x00, 0x00 },  // 3
-  { 0xff, 0xc5, 0x00 },  // 4 UV
-  { 0xff, 0x71, 0x00 },  // 5 rain rate
-  { 0xff, 0xc5, 0x00 },  // 6 solar
-  { 0x00, 0x00, 0x00 },  // 7
-  { 0xff, 0xc1, 0x00 },  // 8 temperature
-  { 0x00, 0x05, 0x00 },  // 9 gust
-  { 0x00, 0x01, 0x00 },  // A humidity
-  { 0x00, 0x00, 0x00 },  // B
-  { 0x00, 0x05, 0x00 },  // C unknown
-  { 0x00, 0x00, 0x00 },  // D
-  { 0x80, 0x01, 0x00 },  // E rain
-  { 0x00, 0x00, 0x00 },  // F
-};
 
 // latest data from the sources, written in loop(), read in the transmit ISR
 struct Slot {
@@ -260,8 +228,8 @@ bool fresh(Slot *s, uint32_t now) {
 // Called from the transmit ISR: fill the next packet of the sequence, CRC and transmitter ID are added by the library
 void preparePacket(byte *packet) {
   uint32_t now = millis();
-  byte type = txseq_vp2[seqIndex];
-  if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
+  byte type = VP2_TX_SEQ[seqIndex];
+  if (++seqIndex >= sizeof(VP2_TX_SEQ)) seqIndex = 0;
 
   bool batt = false;
   if (fresh(&wind, now)) {
@@ -272,7 +240,7 @@ void preparePacket(byte *packet) {
     packet[1] = packet[2] = 0;
   }
   Slot *s = &slots[type];
-  for (byte i = 0; i < 3; i++) packet[3 + i] = fresh(s, now) ? s->v[i] : noSensor[type][i];
+  for (byte i = 0; i < 3; i++) packet[3 + i] = fresh(s, now) ? s->v[i] : VP2_NO_SENSOR[type][i];
   if (fresh(s, now)) batt |= s->batt;
   packet[0] = (type << 4) | (batt ? 8 : 0) | radio.txId;
   packet[6] = packet[7] = 0;

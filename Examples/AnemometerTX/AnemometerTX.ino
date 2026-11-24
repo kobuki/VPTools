@@ -1,7 +1,17 @@
 // AnemometerTX: read a Davis anemometer and transmit it as a Davis transmitter (the ISS SIM board).
 //
 // The packets follow the VP2 ISS type sequence and timing. Wind speed and direction go in every packet,
-// the other packet types carry Davis' "no sensor" values. The radio sleeps between transmissions.
+// the 10-minute gust in the gust packets, the other packet types carry Davis' "no sensor" values. The radio
+// sleeps between transmissions.
+//
+// Wind speed: by default the mean over all rotations since the previous packet. Built with
+// -DWIND_GATE_US=2250000, the rotations counted in a 2.25 s gate ending before each transmission, as the ISS
+// does (1 rotation in 2.25 s is 1 mph). A rotation is the first edge after the switch has rested open for
+// DEBOUNCE_US, so contact bounce on closing and on opening is ignored.
+//
+// Gust packet, as the ISS sends it: byte 3 the highest wind speed in the last 10 gust periods (a gust period is
+// the 20-packet sequence), byte 5 upper nibble the age of that speed in gust periods (0..9), lower nibble its
+// direction rounded to 16 sectors, (dir + 8) >> 4; byte 4 is 1 (5 = no anemometer).
 //
 // Transmit timing: a Davis receiver expects the interval (40 + ID) / 16 s. A board with a quartz crystal can run
 // on its own clock (c0, with a fixed correction p). A Moteino's ceramic resonator is too far off and drifts
@@ -41,7 +51,7 @@
 
 #include "DavisRFM69.h"
 
-#define NAME_VERSION F("AnemometerTX v2026112301")
+#define NAME_VERSION F("AnemometerTX v2026112401")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x4154  // change when Config changes
@@ -60,10 +70,12 @@
 #define GAP_DETECT_THRESH2 50
 #define GAP_DETECT_THRESH3 70
 
-#define DEBOUNCE_US 5000UL        // reed switch bounce
+#define DEBOUNCE_US 5000UL        // the switch must be open this long before a closure counts (contact bounce)
 #define WIND_CALM_US 2250000UL    // no rotation for this long is calm (below 1 mph)
 #define WIND_RPS_MPH 2.25         // 1 revolution per second is 2.25 mph (Davis)
 #define WIND_LEAD_US 100000UL     // read the sensors this long before a transmission
+// #define WIND_GATE_US 2250000UL // count rotations in a gate of this length instead of averaging periods
+#define GUST_SLOTS 10             // gust periods in the gust window
 
 // ----- Clock calibration (c1) -----
 
@@ -96,44 +108,17 @@ struct Config {
 
 Config cfg;
 
-// VP2 ISS packet type sequence (upper nibble of byte 0).
-// Wind speed and direction are in every packet at byte offsets 1 and 2.
-static const byte txseq_vp2[20] =
-{
-  0x8, 0xe, 0x5, 0x4,
-  0x8, 0xe, 0x5, 0x9,
-  0x8, 0xe, 0x5, 0xa,
-  0x8, 0xe, 0x5, 0xa,
-  0x8, 0xe, 0x5, 0x6
-};
-
-// "No sensor" values of bytes 3..5 for each packet type
-static const byte noSensor[16][3] =
-{
-  { 0x00, 0x00, 0x00 },  // 0
-  { 0x00, 0x00, 0x00 },  // 1
-  { 0x00, 0x00, 0x00 },  // 2
-  { 0x00, 0x00, 0x00 },  // 3
-  { 0xff, 0xc5, 0x00 },  // 4 UV
-  { 0xff, 0x71, 0x00 },  // 5 rain rate
-  { 0xff, 0xc5, 0x00 },  // 6 solar
-  { 0x00, 0x00, 0x00 },  // 7
-  { 0xff, 0xc1, 0x00 },  // 8 temperature
-  { 0x00, 0x05, 0x00 },  // 9 gust
-  { 0x00, 0x01, 0x00 },  // A humidity
-  { 0x00, 0x00, 0x00 },  // B
-  { 0x00, 0x05, 0x00 },  // C unknown
-  { 0x00, 0x00, 0x00 },  // D
-  { 0x80, 0x01, 0x00 },  // E rain
-  { 0x00, 0x00, 0x00 },  // F
-};
-
 DavisRFM69 radio;
 bool localEcho = false;
 
 // anemometer pulses, written in the wind ISR
 volatile uint32_t lastPulse;      // time of the last debounced pulse, micros
-volatile uint32_t lastEdge;       // time of the last edge, bounces included
+volatile uint32_t lastEdge;       // time of the last edge, bounces included, micros
+volatile bool lineOpen = true;    // the switch's level after the last edge
+#ifdef WIND_GATE_US
+volatile uint32_t gateStart;      // the gate for the next reading, micros
+volatile uint16_t gateCount;      // rotations in it
+#endif
 volatile uint32_t lastPeriod;     // the last rotation period, 0 if unknown
 volatile uint32_t windowStart;    // the pulse the averaging window starts at
 volatile uint16_t windowCount;    // rotations since windowStart
@@ -143,6 +128,12 @@ volatile bool pulseSeen = false;
 volatile byte windSpeed = 0;      // mph
 volatile byte windDir = 0;        // raw vane value, 0 in the dead zone
 bool windRead = false;            // read for the coming transmission
+
+// gust: the highest speed and its 16-sector direction in each gust period, slot gustCur is the running one
+byte gustMax[GUST_SLOTS], gustDir[GUST_SLOTS];
+byte gustCur = 0;
+volatile byte gustSpeed = 0;      // byte 3 of the next gust packet
+volatile byte gustInfo = 0;       // byte 5: age << 4 | direction
 
 byte seqIndex = 0;
 
@@ -194,7 +185,12 @@ void setup() {
   Serial.print(F("# "));
   Serial.print(NAME_VERSION);
   Serial.println(loaded ? F(" settings from EEPROM") : F(" default settings"));
-  attachInterrupt(digitalPinToInterrupt(WIND_PIN), windInterrupt, FALLING);
+#ifdef WIND_GATE_US
+  Serial.print(F("# wind speed: rotations in a gate of "));
+  Serial.print(WIND_GATE_US);
+  Serial.println(F(" us"));
+#endif
+  attachInterrupt(digitalPinToInterrupt(WIND_PIN), windInterrupt, CHANGE);
   startRadio();
   cmdShow();
 }
@@ -337,26 +333,38 @@ void printK(uint32_t tl, uint32_t ts) {
 
 // ----- Wind -----
 
-// The anemometer reed switch closes once per revolution.
+// The anemometer reed switch closes once per revolution. Both edges interrupt. The first edge after the switch
+// has rested open for DEBOUNCE_US is a closure, whatever the level reads by now: a first contact can be over
+// before the ISR reads the pin. Edges sooner after another (bounce on closing or opening) and the edge that ends
+// a rest closed (opening) don't count. The level read after the last edge of a bounce burst is the settled one.
 void windInterrupt() {
   uint32_t t = micros();
-  if (t - lastEdge > DEBOUNCE_US) {
-    if (pulseSeen && t - lastPulse <= WIND_CALM_US) {
-      lastPeriod = t - lastPulse;
-      windowCount++;
-    } else {  // the first rotation after calm starts a new window
-      windowStart = t;
-      windowCount = 0;
-      lastPeriod = 0;
-      pulseSeen = true;
-    }
-    lastPulse = t;
-  }
+  if (lineOpen && t - lastEdge >= DEBOUNCE_US) rotation(t);
   lastEdge = t;
+  lineOpen = digitalRead(WIND_PIN);
+}
+
+void rotation(uint32_t t) {
+#ifdef WIND_GATE_US
+  if (t - gateStart < WIND_GATE_US) gateCount++;
+#endif
+  if (pulseSeen && t - lastPulse <= WIND_CALM_US) {
+    lastPeriod = t - lastPulse;
+    windowCount++;
+  } else {  // the first rotation after calm starts a new window
+    windowStart = t;
+    windowCount = 0;
+    lastPeriod = 0;
+    pulseSeen = true;
+  }
+  lastPulse = t;
 }
 
 // Wind speed over the rotations since the previous reading, and the vane direction
 void readWind() {
+#ifdef WIND_GATE_US
+  uint32_t txLeft = radio.txTimeLeft();  // before noInterrupts(): it turns interrupts back on
+#endif
   noInterrupts();
   uint32_t now = micros();
   bool seen = pulseSeen;
@@ -364,6 +372,19 @@ void readWind() {
   uint16_t count = windowCount;
   windowStart = last;  // the next window starts where this one ends, no rotation is lost
   windowCount = 0;
+  if (now - lastEdge > 1000000UL) lastEdge = now - DEBOUNCE_US;  // at rest; micros wraps after 71 min
+#ifdef WIND_GATE_US
+  uint16_t gated = gateCount;
+  gateCount = 0;
+  // the next gate ends WIND_LEAD_US before the transmission after the coming one, where that reading is taken
+  gateStart = now + txLeft + (40UL + cfg.txId) * 62500UL - WIND_LEAD_US - WIND_GATE_US;
+  interrupts();
+  uint32_t mph32 = (gated * (uint32_t)(WIND_RPS_MPH * 1000000UL) + WIND_GATE_US / 2) / WIND_GATE_US;
+  windSpeed = mph32 > 255 ? 255 : mph32;
+  windDir = readVane();
+  updateGust();
+  return;
+#endif
   interrupts();
 
   uint32_t since = now - last;
@@ -376,6 +397,33 @@ void readWind() {
   uint16_t mph = period ? (uint16_t)(1000000.0 * WIND_RPS_MPH / period + 0.5) : 0;
   windSpeed = mph > 255 ? 255 : mph;
   windDir = readVane();
+  updateGust();
+}
+
+// Track the highest speed of each gust period; before a gust packet, pick the highest of the last GUST_SLOTS
+// periods (on a tie the newest; within a period the latest reading) and start a new period.
+// seqIndex is the type of the coming packet: its ISR hasn't run yet.
+void updateGust() {
+  byte dir16 = ((windDir + 8) >> 4) & 0x0f;
+  if (windSpeed >= gustMax[gustCur]) {
+    gustMax[gustCur] = windSpeed;
+    gustDir[gustCur] = dir16;
+  }
+  if (VP2_TX_SEQ[seqIndex] != VP2P_WINDGUST) return;
+  byte best = gustCur, bestAge = 0;
+  for (byte age = 1; age < GUST_SLOTS; age++) {
+    byte s = (gustCur + GUST_SLOTS - age) % GUST_SLOTS;
+    if (gustMax[s] > gustMax[best]) {
+      best = s;
+      bestAge = age;
+    }
+  }
+  noInterrupts();
+  gustSpeed = gustMax[best];
+  gustInfo = (bestAge << 4) | gustDir[best];
+  interrupts();
+  gustCur = (gustCur + 1) % GUST_SLOTS;
+  gustMax[gustCur] = gustDir[gustCur] = 0;
 }
 
 // Raw vane value: 1..255 along the potentiometer, 0 in its dead zone (north)
@@ -408,13 +456,18 @@ int analogReadAvg(byte port, byte n) {
 
 // Called from the transmit ISR: fill the next packet of the sequence, CRC and transmitter ID are added by the library
 void preparePacket(byte *packet) {
-  byte type = txseq_vp2[seqIndex];
-  if (++seqIndex >= sizeof(txseq_vp2)) seqIndex = 0;
+  byte type = VP2_TX_SEQ[seqIndex];
+  if (++seqIndex >= sizeof(VP2_TX_SEQ)) seqIndex = 0;
 
   packet[0] = (type << 4) | radio.txId;
   packet[1] = windSpeed;
   packet[2] = windDir;
-  for (byte i = 0; i < 3; i++) packet[3 + i] = noSensor[type][i];
+  for (byte i = 0; i < 3; i++) packet[3 + i] = VP2_NO_SENSOR[type][i];
+  if (type == VP2P_WINDGUST) {
+    packet[3] = gustSpeed;
+    packet[4] = 0x01;
+    packet[5] = gustInfo;
+  }
   packet[6] = packet[7] = 0;
   packet[8] = packet[9] = 0xff;
 

@@ -2,6 +2,10 @@
 
 The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the main [CHANGELOG](../../CHANGELOG.md) under the WxReceiver versions.
 
+## v2026112401, 2026-11-24
+
+- No functional change. The VP2 packet type sequence and the "no sensor" values moved to `DavisRFM69.h` (`VP2_TX_SEQ`, `VP2_NO_SENSOR`), shared with AnemometerTX.
+
 ## v2026112302, 2026-11-23
 
 - **LED blinks on traffic:** 20 ms for each received packet, 100 ms for each transmission, on D9 (the Moteino LED). Set `LED` to -1 in the sketch for a board without one. The blink is switched from the main loop without blocking, so it doesn't affect receive or transmit timing.
