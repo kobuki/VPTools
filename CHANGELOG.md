@@ -2,12 +2,31 @@
 
 The entries follow the version string the WxReceiver sketch prints at startup (`# WxReceiver vYYYYMMDDNN ready to accept commands`).
 
+## Library, 2026-11-24
+
+WxReceiver works as in v2026112301. AnemometerTX v2026112403 and RXTX v2026112403 use these changes.
+
+- **Added: transmitter-only mode.** `stopReceiver()` followed by `enableTx()` runs a transmitter only: the radio sleeps between packets instead of returning to RX.
+- **Added: `timeRxTimeout(bitrate, n)`** measures the board's clock against the RFM69's crystal: it times the RFM69's RX timeout of n units with `micros()`. The timeout unit is 1095 ppm longer than the 16 bit times the datasheet gives.
+- **Added: `txTimeLeft()`**, the time until the next transmission.
+- **Added: VP2 packet definitions** shared by the transmitting sketches: the ISS packet type sequence `VP2_TX_SEQ`, the "no sensor" values `VP2_NO_SENSOR`, and byte 4's wind bits `VP2_BYTE4_WIND_DIR_LSB` (lowest bit of the 9-bit wind direction) and `VP2_BYTE4_NO_WIND` (no anemometer), valid in the packet types of `VP2_BYTE4_WIND_TYPES`.
+
 ## v2026112301, 2026-11-23
 
 - **Refined old frequency tables and added five new bands:** Japan (`m4`, 16 channels), India (`m5`, 19), a second Russian variant (`m6`, 2), Russia (`m7`, 5) and Taiwan (`m8`, 19), with the constants `FREQ_BAND_JP`, `FREQ_BAND_IN`, `FREQ_BAND_R2`, `FREQ_BAND_RU` and `FREQ_BAND_TW`.
 - **Band numbers follow the Davis numbering.** The `m` codes of WxReceiver and RXTX and the `FREQ_BAND_*` values are now Davis' band numbers, 0 to 8 (as used in the BAND command through console or Envoy serial), so NZ moved from `m5` to `m3`; `m5` is now India.
   - `FREQ_BAND_EU` is now 1 and `FREQ_BAND_AU` 2 (they were 2 and 1). Code using the names needs no change.
 - **`setBand()` keeps the discovery channel inside the band's table.** The discovery channel started at index 2, past the end of the 2-channel table. Invalid band numbers are ignored.
+
+Library changes for transmitting, used by RXTX:
+
+- **Added: transmit timing follows the received stations** (`setTxTiming()`, `txPpm()`): the board measures the stations' intervals with its own clock and runs its transmit interval with the same perceived error. The Timer1 period is dithered, so the mean interval hits the target.
+- **Added: transmit frequency correction** (`setTxAfc()`): the transmit frequency is shifted by the offset the software AFC learned on the received stations.
+- **Added: Davis framing** (`setTxFrame()`): `TX_FRAME_DAVIS`, the default, sends an 18-bit lead, a 32-bit preamble and 10.4 kHz deviation as Davis transmitters do; `TX_FRAME_LEGACY` keeps the old 32-bit lead and 48-bit preamble.
+- **Changed:** transmitted packets have their own buffer, separate from the receiver's, and the transmitter ID is set in byte 0 before the CRC. Transmitting works without any station configured.
+- **Fixed:** a restart (`initialize()`, `setStations()`) kept the count of found stations, so after a band or station change at run time, discovery never ran again.
+- **Fixed:** after a transmission the receiver returned to channel 0 of an untracked station instead of the channel it was on.
+- **Fixed:** `enableTx()` sent an extra packet right away when a Timer1 overflow was pending.
 
 RXTX reports the same version, v2026112301.
 

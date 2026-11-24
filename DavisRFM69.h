@@ -149,6 +149,7 @@ class DavisRFM69 {
     static volatile byte txFrame;           // TX_FRAME_LEGACY or TX_FRAME_DAVIS
     static volatile byte txData[DAVIS_PACKET_LEN];  // transmit buffer, separate from DATA which the receiver owns
     static volatile uint32_t timeBase;
+    static volatile bool rxOn;              // the receiver runs between transmissions; false after stopReceiver()
     static volatile byte txId;
     static volatile byte txChannel;
     static volatile byte rxRssi;
@@ -218,6 +219,8 @@ class DavisRFM69 {
     void setTimeBase(uint32_t value);
     void setTxTiming(bool learn, int16_t ppm);  // ppm in 1/16 ppm: start value when learning, fixed value otherwise
     static int16_t txPpm() { return txPpmAcc / 16; }  // current correction, 1/16 ppm
+    uint32_t timeRxTimeout(uint16_t bitrate, byte n);  // micros() until the RFM69's RX start timeout, 0 if not possible
+    static uint32_t txTimeLeft();  // micros until the next transmission
     void setTxAfc(bool on);
     void setTxFrame(byte frame);  // TX_FRAME_LEGACY or TX_FRAME_DAVIS
     void setRepeaterPT(bool value = false);
@@ -616,6 +619,48 @@ static const uint8_t bandTabLengths[FREQ_BAND_COUNT] = {
                               //   packet[4] has values 0-3 (ATK) or 5 (temp/hum)
 #define VP2P_RAIN         0xE // rain bucket tips counter
 #define VP2P_SOIL_LEAF    0xF // soil/leaf station
+
+// VP2 ISS packet type sequence (upper nibble of byte 0), repeated by the transmitter.
+// Wind speed and direction are in every packet at byte offsets 1 and 2.
+static const byte VP2_TX_SEQ[20] =
+{
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_UV,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_WINDGUST,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_HUMIDITY,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_HUMIDITY,
+  VP2P_TEMP, VP2P_RAIN, VP2P_RAINSECS, VP2P_SOLAR
+};
+
+// Wind bits in byte 4 of the VP2 packet types in VP2_BYTE4_WIND_TYPES (bit n set = type n: 4, 5, 6, 8, 9, A, C, E):
+// - bit 1 is the lowest bit of the 9-bit wind direction (byte 2 holds the upper 8 bits)
+// - bit 2 means no anemometer: a receiver ignores the wind of the packet and shows no wind speed and direction
+//   until the next packet. An ISS with an anemometer never sets it.
+#define VP2_BYTE4_WIND_TYPES 0x5770
+#define VP2_BYTE4_WIND_DIR_LSB 0x02
+#define VP2_BYTE4_NO_WIND 0x04
+
+// "No sensor" values of bytes 3..5 for each VP2 packet type, as an ISS with nothing connected sends them: the
+// anemometer is missing too, so some have VP2_BYTE4_NO_WIND set; clear it when sending wind. The wind bytes 1 and
+// 2 are 0 then
+static const byte VP2_NO_SENSOR[16][3] =
+{
+  { 0x00, 0x00, 0x00 },  // 0
+  { 0x00, 0x00, 0x00 },  // 1
+  { 0x00, 0x00, 0x00 },  // 2
+  { 0x00, 0x00, 0x00 },  // 3
+  { 0xff, 0xc5, 0x00 },  // 4 UV
+  { 0xff, 0x71, 0x00 },  // 5 rain rate
+  { 0xff, 0xc5, 0x00 },  // 6 solar
+  { 0x00, 0x00, 0x00 },  // 7
+  { 0xff, 0xc1, 0x00 },  // 8 temperature
+  { 0x00, 0x05, 0x00 },  // 9 gust
+  { 0x00, 0x01, 0x00 },  // A humidity
+  { 0x00, 0x00, 0x00 },  // B
+  { 0x00, 0x05, 0x00 },  // C unknown
+  { 0x00, 0x00, 0x00 },  // D
+  { 0x80, 0x01, 0x00 },  // E rain
+  { 0x00, 0x00, 0x00 },  // F
+};
 
 // Vue packet types
 #define VUEP_VCAP         0x2 // supercap voltage
