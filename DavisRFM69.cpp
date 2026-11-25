@@ -473,6 +473,8 @@ void DavisRFM69::discoveryFei() {
 // Average it into the station's correction and limit that.
 void DavisRFM69::updateAfc(Station *s) {
   if (FEI == RF69_FEI_INVALID) {  // no usable measurement: keep the correction, report the one in use
+    // a first packet without one still decoded at afcApplied: start there, not at the discovery correction
+    if (s->afcSamples == 0) { s->afcCorr = afcApplied; s->afcSamples = 1; }
     FEI = afcApplied;
     return;
   }
