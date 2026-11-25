@@ -13,6 +13,7 @@ The library version is `VPTOOLS_VERSION` in `DavisRFM69.h`, and the example sket
   - A station dropped after `RESYNC_THRESHOLD` misses is searched for at its own last correction.
 - **Fixed: after a discovery reading the receiver waited two channels ahead instead of one** (since v2026110601). The 150 s discovery step fired right after every reading, so the transmitter came by one interval later than intended.
 - **Fixed: with software AFC, a station whose first packet had no valid FEI reading was lost again** (since v2026102801). It got no correction of its own and was tracked at the discovery correction, which can be too far from it, until it was dropped after `RESYNC_THRESHOLD` misses. Its first correction is now the one its first packet was received with.
+- **Changed: a station's first correction is its first reading in full,** not half way between it and the correction the packet was received with (since v2026102801). A station found far from the discovery correction was mistuned for several hops and lost most of its packets meanwhile.
 
 ## v2026112401, 2026-11-24
 

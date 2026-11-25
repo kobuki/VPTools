@@ -482,7 +482,7 @@ void DavisRFM69::updateAfc(Station *s) {
   int32_t diff = offset - s->afcCorr;
   int32_t corr;
   if (s->afcSamples == 0) {
-    corr = offset - FEI / 2;  // the first packet came through at afcApplied: start there, not at 0, half way to the reading
+    corr = offset;  // start at the first reading: half way left a station far from afcApplied mistuned for hops
   } else if (s->afcSamples < 4) {
     corr = s->afcCorr + diff / 2;  // converge fast at first
   } else {
