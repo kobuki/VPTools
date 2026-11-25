@@ -40,7 +40,7 @@
 #include "DavisRFM69.h"
 #include "PacketFifo.h"
 
-#define NAME_VERSION F("RXTX v2026112404")
+#define NAME_VERSION F("RXTX v2026112501")
 #define SERIAL_BAUD 115200
 #define SERBUF_LEN 8
 #define CFG_MAGIC 0x5258  // change when Config changes

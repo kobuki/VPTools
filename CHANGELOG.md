@@ -4,6 +4,14 @@ Changes to the library: `DavisRFM69`, `PacketFifo` and `TimerOne`. The changes o
 
 The library version is `VPTOOLS_VERSION` in `DavisRFM69.h`, and the example sketches print it at startup after their own version, for example `# WxReceiver v2026112401 (VPTools v2026112401) ready to accept commands`. Before v2026112401 the library had no version string of its own; those entries are headed by the WxReceiver version that first shipped the change.
 
+## v2026112501, 2026-11-25
+
+- **Fixed: with software AFC, a station far in frequency from the tracked ones was found late or not at all.** Discovery listened with the correction of the last packet received, so every packet of a tracked station undid the offset that discovery had just measured for a missing one. Transmitters can be 10 kHz apart, and the receiver can't decode one while tuned for the other. Discovery now has its own correction:
+  - It starts from the tracked stations' correction.
+  - A discovery offset reading replaces it, and packets of tracked stations don't overwrite it for `DISCOVERY_STEP` (150 s). Each new reading restarts that time.
+  - Readings are no longer taken while the receiver waits for a tracked station's packet on the discovery channel.
+  - A station dropped after `RESYNC_THRESHOLD` misses is searched for at its own last correction.
+
 ## v2026112401, 2026-11-24
 
 - **Added: library version** `VPTOOLS_VERSION`.

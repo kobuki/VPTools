@@ -2,6 +2,10 @@
 
 The entries follow the version string the sketch prints at startup (`# RXTX vYYYYMMDDNN ...`). Changes to the DavisRFM69 library are listed in the [library CHANGELOG](../../CHANGELOG.md).
 
+## v2026112501, 2026-11-25
+
+- Library v2026112501: fixed late or missing discovery of a station far in frequency from the tracked ones.
+
 ## v2026112404, 2026-11-24
 
 - **The startup line shows the library version:** `# RXTX v2026112404 (VPTools v2026112401) settings from EEPROM`.
