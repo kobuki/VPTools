@@ -280,7 +280,8 @@ void DavisRFM69::handleTimerInt() {
     return;
   }
 
-  if (t - lastDiscStep > DISCOVERY_STEP) {
+  // signed: discoveryFei() above sets lastDiscStep after t was taken, and as unsigned that read as a whole step
+  if ((int32_t)(t - lastDiscStep) > DISCOVERY_STEP) {
     // with no station tracked there is nothing else to listen to: always (re)tune, which also rearms a stuck receiver
     bool parked = stationsFound < numStations && (CHANNEL == discChannel || stationsFound == 0);
     discChannel = selfPointer->nextChannel(discChannel);
