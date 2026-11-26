@@ -260,6 +260,7 @@ class DavisRFM69 {
     void receiveBegin();
     void updateAfc(Station *s);
     void discoveryFei();
+    void discoveryReading(int32_t offset);
     static bool swAfc() { return afcMode != RF69_AFC_OFF && afcMode != RF69_AFC_HW; }
     void setMode(byte mode);
     void setHighPowerRegs(bool onOff);
