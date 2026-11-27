@@ -6,15 +6,11 @@ The library version is `VPTOOLS_VERSION` in `DavisRFM69.h`, and the example sket
 
 ## v2026112501, 2026-11-25
 
-- **Fixed: with software AFC, a station far in frequency from the tracked ones was found late or not at all.** Discovery listened with the correction of the last packet received, so every packet of a tracked station undid the offset that discovery had just measured for a missing one. Transmitters can be 10 kHz apart, and the receiver can't decode one while tuned for the other. Discovery now has its own correction:
-  - It starts from the tracked stations' correction.
-  - A discovery offset reading replaces it, and packets of tracked stations don't overwrite it for `DISCOVERY_STEP` (150 s). Each new reading restarts that time.
-  - Readings are no longer taken while the receiver waits for a tracked station's packet on the discovery channel.
-  - A station dropped after `RESYNC_THRESHOLD` misses is searched for at its own last correction.
-- **Fixed: after a discovery reading the receiver waited two channels ahead instead of one** (since v2026110601). The 150 s discovery step fired right after every reading, so the transmitter came by one interval later than intended.
-- **Fixed: with software AFC, a station whose first packet had no valid FEI reading was lost again** (since v2026102801). It got no correction of its own and was tracked at the discovery correction, which can be too far from it, until it was dropped after `RESYNC_THRESHOLD` misses. Its first correction is now the one its first packet was received with.
-- **Changed: a station's first correction is its first reading in full,** not half way between it and the correction the packet was received with (since v2026102801). A station found far from the discovery correction was mistuned for several hops and lost most of its packets meanwhile.
-- **Fixed: with software AFC, a packet that failed its CRC check on the discovery channel was not used as a discovery reading** (since v2026110601). A missing station received too far off to decode comes in like that: its preamble's offset is now a discovery reading, like an RSSI trigger without packet. On the US band, with a second transmitter about 9 kHz from the first, the second was found 3–114 s after the first in 10 of 10 restarts (before: 123 s, 376 s and not within 15 minutes in 3).
+- **Fixed: with software AFC, a station far in frequency from the tracked ones was found late or not at all.** Packets of tracked stations overwrote the offset discovery had measured for the missing one; discovery now keeps its own correction.
+- **Fixed: after a discovery reading the receiver waited two channels ahead instead of one** (since v2026110601).
+- **Fixed: with software AFC, a station whose first packet had no valid FEI reading was lost again** (since v2026102801). It now starts from the correction that packet was received with.
+- **Changed: a station's first correction is its first reading in full,** not half way to it (since v2026102801), so a station found far off is no longer mistuned for several hops.
+- **Fixed: with software AFC, a packet that failed its CRC check on the discovery channel was not used as a discovery reading** (since v2026110601). Such a packet is typically the missing station received too far off to decode.
 
 ## v2026112401, 2026-11-24
 
