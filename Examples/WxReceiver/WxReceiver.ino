@@ -49,7 +49,7 @@
 #define BMP388_CONV_TIME 40 // ms, a forced conversion with 8x temperature and 4x pressure oversampling takes up to 24 ms
 #endif
 
-#define NAME_VERSION F("WxReceiver v2026112401")
+#define NAME_VERSION F("WxReceiver v2026112501")
 
 #define LED 9 // Moteinos have LEDs on D9
 #define SERIAL_BAUD 115200

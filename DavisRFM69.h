@@ -20,7 +20,7 @@
 #include "PacketFifo.h"
 
 // Library version, printed by the example sketches at startup; see CHANGELOG.md
-#define VPTOOLS_VERSION "v2026112401"
+#define VPTOOLS_VERSION "v2026112501"
 
 #define DAVIS_PACKET_LEN     10 // ISS has fixed packet lengths of eight bytes, including CRC and trailing repeater info
 #define SPI_CS               SS // SS is the SPI slave select pin, for instance D10 on atmega328
@@ -158,7 +158,10 @@ class DavisRFM69 {
     static volatile byte rxRssi;
     static volatile byte afcMode;
     static volatile int16_t afcApplied;
-    static volatile int16_t afcLast;
+    static volatile int16_t afcDisc;
+    static volatile bool discReading;
+    static volatile uint32_t discReadingTime;
+    static volatile bool rxForStation;
     static volatile uint32_t rssiTime;
     static volatile bool feiWait;
     static volatile bool feiPending;
@@ -257,6 +260,7 @@ class DavisRFM69 {
     void receiveBegin();
     void updateAfc(Station *s);
     void discoveryFei();
+    void discoveryReading(int32_t offset);
     static bool swAfc() { return afcMode != RF69_AFC_OFF && afcMode != RF69_AFC_HW; }
     void setMode(byte mode);
     void setHighPowerRegs(bool onOff);

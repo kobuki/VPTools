@@ -2,6 +2,10 @@
 
 The entries follow the version string the sketch prints at startup (`# WxReceiver vYYYYMMDDNN (VPTools vYYYYMMDDNN) ready to accept commands`; the library version in brackets since v2026112401). Library changes are in the [library CHANGELOG](../../CHANGELOG.md), whose versions up to v2026112301 match the WxReceiver versions.
 
+## v2026112501, 2026-11-25
+
+- Library v2026112501: fixed late or missing discovery of a station far in frequency from the tracked ones.
+
 ## v2026112401, 2026-11-24
 
 - **The startup banner shows the library version:** `# WxReceiver v2026112401 (VPTools v2026112401) ready to accept commands`.

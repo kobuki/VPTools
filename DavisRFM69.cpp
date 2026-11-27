@@ -48,7 +48,10 @@ volatile byte DavisRFM69::txChannel = 255;
 volatile byte DavisRFM69::rxRssi = 190; // -95 dBm, same as REG_RSSITHRESH in the init table
 volatile byte DavisRFM69::afcMode = RF69_AFC_OFF;
 volatile int16_t DavisRFM69::afcApplied = 0;  // software AFC correction the receiver is currently tuned with
-volatile int16_t DavisRFM69::afcLast = 0;     // last learned correction of any station, used for discovery
+volatile int16_t DavisRFM69::afcDisc = 0;     // software AFC: correction used for discovery
+volatile bool DavisRFM69::discReading = false; // software AFC: afcDisc comes from a discovery reading or a lost station
+volatile uint32_t DavisRFM69::discReadingTime = 0;
+volatile bool DavisRFM69::rxForStation = false; // tuned for a tracked station's expected packet, not for discovery
 volatile uint32_t DavisRFM69::rssiTime = 0;   // software AFC: when RSSI triggered
 volatile bool DavisRFM69::feiWait = false;    // software AFC: inside the wait for the preamble
 volatile bool DavisRFM69::feiPending = false; // software AFC: FEI started, payload not yet received
@@ -189,7 +192,8 @@ void DavisRFM69::resetAfc() {
     stations[i].afcCorr = 0;
     stations[i].afcSamples = 0;
   }
-  afcLast = 0;
+  afcDisc = 0;
+  discReading = false;
   discCandValid = false;
 }
 
@@ -276,7 +280,8 @@ void DavisRFM69::handleTimerInt() {
     return;
   }
 
-  if (t - lastDiscStep > DISCOVERY_STEP) {
+  // signed: discoveryFei() above sets lastDiscStep after t was taken, and as unsigned that read as a whole step
+  if ((int32_t)(t - lastDiscStep) > DISCOVERY_STEP) {
     // with no station tracked there is nothing else to listen to: always (re)tune, which also rearms a stuck receiver
     bool parked = stationsFound < numStations && (CHANNEL == discChannel || stationsFound == 0);
     discChannel = selfPointer->nextChannel(discChannel);
@@ -301,6 +306,13 @@ void DavisRFM69::handleTimerInt() {
       stations[i].missedPackets++;
       if (stations[i].lostPackets > RESYNC_THRESHOLD) {
         stations[i].numResyncs++;
+        if (swAfc() && stations[i].afcSamples > 0) {
+          // look for the lost station at its own correction: the others' can be too far from it
+          afcDisc = stations[i].afcCorr;
+          discReading = true;
+          discReadingTime = t;
+          discCandValid = false;
+        }
         stations[i].interval = 0;
         stations[i].lostPackets = 0;
         lostStations++;
@@ -387,6 +399,8 @@ void DavisRFM69::handleRadioInt() {
       stations[stIx].interval = (41 + id) * timeBase / 16; // Davis' official tx interval in us
       if (stationsFound < numStations) stationsFound++;
       if (lostStations > 0) lostStations--;
+      discReading = false;  // the reading most likely came from this station: discovery starts over for the others
+      discCandValid = false;
     }
 
     if (swAfc()) updateAfc(&stations[stIx]);
@@ -412,6 +426,12 @@ void DavisRFM69::handleRadioInt() {
       setChannel(stations[curStation].channel); // reset current radio channel
     }
 
+  } else if (swAfc() && FEI != RF69_FEI_INVALID && stationsFound < numStations && CHANNEL == discChannel
+             && !rxForStation) {
+    // a packet that failed the CRC on the discovery channel is most likely the missing station, received too far
+    // off to decode: its preamble's offset is a discovery reading (on the US band the next chance is minutes away)
+    discoveryReading((int32_t)afcApplied + FEI);
+    setChannel(discChannel);
   } else {
     setChannel(CHANNEL); // this always has to be done somewhere right after reception, even for ignored/bogus packets
   }
@@ -420,40 +440,50 @@ void DavisRFM69::handleRadioInt() {
 // Software AFC: RSSI triggered, but no payload followed. While discovering, that is most likely a packet lost to
 // the very offset AFC is there to correct, so take the FEI measured on its preamble as the discovery correction.
 void DavisRFM69::discoveryFei() {
-  if (stationsFound >= numStations || CHANNEL != discChannel) return;  // tracking: the next hop rearms RSSI
-  if (readReg(REG_AFCFEI) & RF_AFCFEI_FEI_DONE) {
-    int32_t offset = (int32_t)afcApplied + (int16_t)word(readReg(REG_FEIMSB), readReg(REG_FEILSB));
-    int32_t limit = afcMode * 1000L / RF69_FSTEP;
-    bool follow = true;
-    if (offset >= -limit && offset <= limit) {
-      if (feiRssi + AFC_DISC_MARGIN <= rxRssi) {
-        afcLast = offset;
-        discCandValid = false;
-      } else if (feiRssi + AFC_DISC_WEAK > rxRssi) {
-        follow = false;  // too close to the threshold to tell from noise
-      } else if (discCandValid && abs(offset - discCand) <= AFC_DISC_AGREE) {
-        afcLast = (offset + discCand) / 2;
-        discCandValid = false;
-      } else {
-        discCand = offset;
-        discCandValid = true;
-      }
-    } else {
-      follow = false;
-    }
-    if (follow) {
-      // the transmitter hops to the next channel: wait there, one interval instead of a whole hop cycle away
-      discChannel = nextChannel(discChannel);
-      lastDiscStep = micros();
-    }
-  }
+  // tracking, or tuned for a tracked station's packet on the discovery channel: the next hop rearms RSSI
+  if (stationsFound >= numStations || CHANNEL != discChannel || rxForStation) return;
+  if (readReg(REG_AFCFEI) & RF_AFCFEI_FEI_DONE)
+    discoveryReading((int32_t)afcApplied + (int16_t)word(readReg(REG_FEIMSB), readReg(REG_FEILSB)));
   setChannel(discChannel);  // rearm RSSI on the discovery channel, retuned if the correction changed
+}
+
+// Software AFC: a discovery reading, the offset measured on a preamble while discovering, with feiRssi its strength
+void DavisRFM69::discoveryReading(int32_t offset) {
+  int32_t limit = afcMode * 1000L / RF69_FSTEP;
+  bool follow = true;
+  if (offset >= -limit && offset <= limit) {
+    if (feiRssi + AFC_DISC_MARGIN <= rxRssi) {
+      afcDisc = offset;
+      discReading = true;
+      discReadingTime = micros();
+      discCandValid = false;
+    } else if (feiRssi + AFC_DISC_WEAK > rxRssi) {
+      follow = false;  // too close to the threshold to tell from noise
+    } else if (discCandValid && abs(offset - discCand) <= AFC_DISC_AGREE) {
+      afcDisc = (offset + discCand) / 2;
+      discReading = true;
+      discReadingTime = micros();
+      discCandValid = false;
+    } else {
+      discCand = offset;
+      discCandValid = true;
+    }
+  } else {
+    follow = false;
+  }
+  if (follow) {
+    // the transmitter hops to the next channel: wait there, one interval instead of a whole hop cycle away
+    discChannel = nextChannel(discChannel);
+    lastDiscStep = micros();
+  }
 }
 
 // Software AFC: FEI was measured on the packet's preamble, relative to the receiver tuned with afcApplied.
 // Average it into the station's correction and limit that.
 void DavisRFM69::updateAfc(Station *s) {
   if (FEI == RF69_FEI_INVALID) {  // no usable measurement: keep the correction, report the one in use
+    // a first packet without one still decoded at afcApplied: start there, not at the discovery correction
+    if (s->afcSamples == 0) { s->afcCorr = afcApplied; s->afcSamples = 1; }
     FEI = afcApplied;
     return;
   }
@@ -461,7 +491,7 @@ void DavisRFM69::updateAfc(Station *s) {
   int32_t diff = offset - s->afcCorr;
   int32_t corr;
   if (s->afcSamples == 0) {
-    corr = offset - FEI / 2;  // the first packet came through at afcApplied: start there, not at 0, half way to the reading
+    corr = offset;  // start at the first reading: half way left a station far from afcApplied mistuned for hops
   } else if (s->afcSamples < 4) {
     corr = s->afcCorr + diff / 2;  // converge fast at first
   } else {
@@ -470,7 +500,11 @@ void DavisRFM69::updateAfc(Station *s) {
   int32_t limit = afcMode * 1000L / RF69_FSTEP;
   s->afcCorr = constrain(corr, -limit, limit);
   if (s->afcSamples < 255) s->afcSamples++;
-  afcLast = s->afcCorr;
+  // Discovery starts from the tracked stations' correction, which is mostly the receiver's own offset. A discovery
+  // reading takes over from it for DISCOVERY_STEP: it is most likely a missing station, and transmitters can be
+  // 10 kHz apart, too far for the receiver to decode one tuned for the other.
+  if (discReading && micros() - discReadingTime > DISCOVERY_STEP) discReading = false;
+  if (!discReading) afcDisc = s->afcCorr;
   FEI = offset;  // report the transmitter's offset from the frequency table
 }
 
@@ -718,11 +752,13 @@ void DavisRFM69::setChannel(byte channel)
   if (txMode) {
     if (txAfc) corr += txAfcApplied;
   } else {
-    // software AFC: the expected station's correction, or the last learned one while discovering
+    // software AFC: the expected station's correction, or the discovery correction
     afcApplied = 0;
+    rxForStation = false;
     if (stations != NULL && swAfc()) {
       Station *s = &stations[curStation];
-      afcApplied = (s->interval > 0 && channel == s->channel && s->afcSamples > 0) ? s->afcCorr : afcLast;
+      rxForStation = s->interval > 0 && channel == s->channel;
+      afcApplied = (rxForStation && s->afcSamples > 0) ? s->afcCorr : afcDisc;
     }
     corr += afcApplied;
   }
